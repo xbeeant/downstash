@@ -2,7 +2,7 @@
 import { type ConfigOverrides, type LogLevel, resolveConfig } from "./config.ts";
 import { openDb } from "./db.ts";
 import { createLogger } from "./logger.ts";
-import { createRedisStore } from "./redis/store.ts";
+import { createRedisStore } from "./redis/mysql-store.ts";
 import { createServer } from "./server.ts";
 import { createWorker } from "./worker/loop.ts";
 
@@ -14,7 +14,11 @@ interface ParsedArgs {
 
 const VALUE_FLAGS = new Set([
   "port",
-  "db",
+  "mysql-host",
+  "mysql-port",
+  "mysql-user",
+  "mysql-password",
+  "mysql-database",
   "tick-ms",
   "current-signing-key",
   "next-signing-key",
@@ -66,8 +70,20 @@ function parseArgs(argv: string[]): ParsedArgs {
       case "port":
         overrides.port = requireInt(name, value);
         break;
-      case "db":
-        overrides.dbPath = requireValue(name, value);
+      case "mysql-host":
+        overrides.mysql = { ...overrides.mysql, host: requireValue(name, value) };
+        break;
+      case "mysql-port":
+        overrides.mysql = { ...overrides.mysql, port: requireInt(name, value) };
+        break;
+      case "mysql-user":
+        overrides.mysql = { ...overrides.mysql, user: requireValue(name, value) };
+        break;
+      case "mysql-password":
+        overrides.mysql = { ...overrides.mysql, password: requireValue(name, value) };
+        break;
+      case "mysql-database":
+        overrides.mysql = { ...overrides.mysql, database: requireValue(name, value) };
         break;
       case "tick-ms":
         overrides.tickMs = requireInt(name, value);
@@ -131,9 +147,15 @@ usage:
   downstash keys                   print signing keys and Redis config for .env.local
   downstash help                   show this help
 
-flags:
+MySQL configuration (required):
+  --mysql-host <host>              MySQL host (env: DOWNSTASH_MYSQL_HOST, default localhost)
+  --mysql-port <n>                 MySQL port (env: DOWNSTASH_MYSQL_PORT, default 3306)
+  --mysql-user <user>              MySQL user (env: DOWNSTASH_MYSQL_USER, default root)
+  --mysql-password <password>      MySQL password (env: DOWNSTASH_MYSQL_PASSWORD)
+  --mysql-database <db>            MySQL database (env: DOWNSTASH_MYSQL_DATABASE, default downstash)
+
+Other flags:
   --port <n>                       HTTP port (env: DOWNSTASH_PORT, default 8080)
-  --db <path>                      SQLite db file (env: DOWNSTASH_DB, default .downstash/db.sqlite)
   --tick-ms <n>                    delivery loop interval (env: DOWNSTASH_TICK_MS, default 250)
   --current-signing-key <s>        override current key (env: DOWNSTASH_CURRENT_SIGNING_KEY)
   --next-signing-key <s>           override next key (env: DOWNSTASH_NEXT_SIGNING_KEY)
@@ -157,20 +179,24 @@ async function main(): Promise<void> {
     console.log(`QSTASH_NEXT_SIGNING_KEY=${config.nextSigningKey}`);
     console.log(`UPSTASH_REDIS_REST_URL=http://localhost:${config.port}`);
     console.log(`UPSTASH_REDIS_REST_TOKEN=${config.redisToken}`);
+    console.log(`DOWNSTASH_MYSQL_HOST=${config.mysql.host}`);
+    console.log(`DOWNSTASH_MYSQL_PORT=${config.mysql.port}`);
+    console.log(`DOWNSTASH_MYSQL_USER=${config.mysql.user}`);
+    console.log(`DOWNSTASH_MYSQL_DATABASE=${config.mysql.database}`);
     return;
   }
 
   if (args.command === "reset") {
-    const db = openDb(config.dbPath);
-    db.reset();
-    db.close();
-    console.log(`reset: cleared messages in ${config.dbPath}`);
+    const db = await openDb(config.mysql);
+    await db.reset();
+    await db.close();
+    console.log(`reset: cleared messages in MySQL database ${config.mysql.database}`);
     return;
   }
 
   const logger = createLogger(config.logLevel);
-  const db = openDb(config.dbPath);
-  const redisStore = createRedisStore();
+  const db = await openDb(config.mysql);
+  const redisStore = await createRedisStore(config.mysql);
   const app = createServer({ db, logger, redisStore, redisToken: config.redisToken });
   const worker = createWorker({
     db,
@@ -187,7 +213,7 @@ async function main(): Promise<void> {
 
   logger.info("downstash listening", {
     port: config.port,
-    db: config.dbPath,
+    mysql: config.mysql,
     tickMs: config.tickMs,
   });
 
@@ -198,7 +224,7 @@ async function main(): Promise<void> {
     logger.info("shutting down", { signal });
     await worker.stop();
     server.stop();
-    db.close();
+    await db.close();
     process.exit(0);
   };
   process.on("SIGINT", () => void shutdown("SIGINT"));

@@ -8,16 +8,16 @@ export interface MessagesDeps {
 export function messagesRoute({ db }: MessagesDeps): Hono {
   const app = new Hono();
 
-  app.get("/v2/messages/:messageId", (c) => {
+  app.get("/v2/messages/:messageId", async (c) => {
     const id = c.req.param("messageId");
-    const row = db.getMessage(id);
+    const row = await db.getMessage(id);
     if (!row) return c.json({ error: "not_found" }, 404);
     return c.json(toApiShape(row));
   });
 
-  app.delete("/v2/messages/:messageId", (c) => {
+  app.delete("/v2/messages/:messageId", async (c) => {
     const id = c.req.param("messageId");
-    const cancelled = db.cancelMessage(id);
+    const cancelled = await db.cancelMessage(id);
     if (!cancelled) return c.json({ error: "not_found_or_not_pending" }, 404);
     return c.body(null, 204);
   });

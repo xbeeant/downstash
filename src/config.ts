@@ -1,8 +1,10 @@
+import type { MySQLConfig } from "./db.ts";
+
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
 export interface Config {
   port: number;
-  dbPath: string;
+  mysql: MySQLConfig;
   tickMs: number;
   currentSigningKey: string;
   nextSigningKey: string;
@@ -15,7 +17,7 @@ const DEFAULT_NEXT_KEY = "sig_downstash_next_dev_key_do_not_use_in_prod";
 
 export interface ConfigOverrides {
   port?: number;
-  dbPath?: string;
+  mysql?: Partial<MySQLConfig>;
   tickMs?: number;
   currentSigningKey?: string;
   nextSigningKey?: string;
@@ -27,9 +29,21 @@ export function resolveConfig(
   overrides: ConfigOverrides = {},
   env: Record<string, string | undefined> = process.env,
 ): Config {
+  const mysqlHost = overrides.mysql?.host ?? env.DOWNSTASH_MYSQL_HOST ?? "localhost";
+  const mysqlPort = overrides.mysql?.port ?? parseIntOr(env.DOWNSTASH_MYSQL_PORT, 3306);
+  const mysqlUser = overrides.mysql?.user ?? env.DOWNSTASH_MYSQL_USER ?? "root";
+  const mysqlPassword = overrides.mysql?.password ?? env.DOWNSTASH_MYSQL_PASSWORD ?? "";
+  const mysqlDatabase = overrides.mysql?.database ?? env.DOWNSTASH_MYSQL_DATABASE ?? "downstash";
+
   return {
     port: overrides.port ?? parseIntOr(env.DOWNSTASH_PORT, 8080),
-    dbPath: overrides.dbPath ?? env.DOWNSTASH_DB ?? ".downstash/db.sqlite",
+    mysql: {
+      host: mysqlHost,
+      port: mysqlPort,
+      user: mysqlUser,
+      password: mysqlPassword,
+      database: mysqlDatabase,
+    },
     tickMs: overrides.tickMs ?? parseIntOr(env.DOWNSTASH_TICK_MS, 250),
     currentSigningKey:
       overrides.currentSigningKey ?? env.DOWNSTASH_CURRENT_SIGNING_KEY ?? DEFAULT_CURRENT_KEY,

@@ -49,7 +49,7 @@ export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Pr
 
   const now = Date.now();
   if (response?.ok) {
-    db.markDelivered(message.id, now);
+    await db.markDelivered(message.id, now);
     logger.info("delivered", {
       messageId: message.id,
       destination: message.destination,
@@ -65,7 +65,7 @@ export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Pr
   const failureMessage = errorText ?? `non-2xx status ${response?.status ?? "unknown"}`;
   const nextAttempt = message.attempt + 1;
   if (nextAttempt > message.retries) {
-    db.markFailed(message.id, failureMessage, now);
+    await db.markFailed(message.id, failureMessage, now);
     logger.warn("failed (retries exhausted)", {
       messageId: message.id,
       destination: message.destination,
@@ -79,7 +79,7 @@ export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Pr
   }
 
   const wait = backoffMs(nextAttempt);
-  db.rescheduleRetry(message.id, nextAttempt, now + wait, failureMessage, now);
+  await db.rescheduleRetry(message.id, nextAttempt, now + wait, failureMessage, now);
   logger.info("retry scheduled", {
     messageId: message.id,
     destination: message.destination,
@@ -103,7 +103,7 @@ async function enqueueCallback(
     sourceMessageId: message.id,
     retried: message.attempt,
   };
-  enqueueDerivedMessage(message.callbackUrl!, envelope, deps, kind);
+  await enqueueDerivedMessage(message.callbackUrl!, envelope, deps, kind);
 }
 
 async function enqueueFailureCallback(
@@ -121,18 +121,18 @@ async function enqueueFailureCallback(
     retried: message.attempt,
     error: errorText,
   };
-  enqueueDerivedMessage(message.failureCallbackUrl!, envelope, deps, "failureCallback");
+  await enqueueDerivedMessage(message.failureCallbackUrl!, envelope, deps, "failureCallback");
 }
 
-function enqueueDerivedMessage(
+async function enqueueDerivedMessage(
   url: string,
   envelope: Record<string, unknown>,
   deps: DeliverDeps,
   kind: "callback" | "failureCallback",
-): void {
+): Promise<void> {
   const body = new TextEncoder().encode(JSON.stringify(envelope));
   const id = newMessageId();
-  deps.db.insertMessage({
+  await deps.db.insertMessage({
     id,
     destination: url,
     method: "POST",

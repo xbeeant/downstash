@@ -71,7 +71,7 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
   const forwardHeaders = collectForwardHeaders(c.req.raw.headers, forceJson);
 
   const id = newMessageId();
-  db.insertMessage({
+  await db.insertMessage({
     id,
     destination,
     method,
@@ -221,7 +221,7 @@ async function handleBatch(c: Context, { db, logger }: PublishDeps): Promise<Res
     const forwardHeaders = collectForwardHeadersFromObject(itemHeaders);
 
     const id = newMessageId();
-    db.insertMessage({
+    await db.insertMessage({
       id,
       destination: rawDest,
       method,
@@ -266,8 +266,6 @@ function collectForwardHeadersFromObject(headers: Record<string, string>): Recor
 function collectForwardHeaders(headers: Headers, forceJson: boolean): Record<string, string> {
   const out: Record<string, string> = {};
 
-  // Pass-through Content-Type from the publish request so destinations get
-  // the same encoding the publisher sent. Upstash-Forward-Content-Type wins.
   const inboundContentType = headers.get("content-type");
   if (inboundContentType) {
     out["Content-Type"] = inboundContentType;

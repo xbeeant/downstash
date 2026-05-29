@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # downstash 服务
+  downstash:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: downstash
+    ports:
+      - "8080:8080"
+    environment:
+      # MySQL 连接配置
+      - DOWNSTASH_MYSQL_HOST=mysql
+      - DOWNSTASH_MYSQL_PORT=3306
+      - DOWNSTASH_MYSQL_USER=root
+      - DOWNSTASH_MYSQL_PASSWORD=${MYSQL_ROOT_PASSWORD:-secret}
+      - DOWNSTASH_MYSQL_DATABASE=downstash
+      
+      # 服务器配置
+      - DOWNSTASH_PORT=8080
+      - DOWNSTASH_TICK_MS=250
+      
+      # Redis 认证令牌（生产环境请修改）
+      - DOWNSTASH_REDIS_TOKEN=dev
+      
+      # 日志级别
+      - DOWNSTASH_LOG_LEVEL=info
+      
+      # 签名密钥（生产环境请使用安全的密钥）
+      - DOWNSTASH_CURRENT_SIGNING_KEY=sig_production_key_change_me
+      - DOWNSTASH_NEXT_SIGNING_KEY=sig_next_production_key_change_me
+    depends_on:
+      - mysql
+    networks:
+      - downstash-network
+    restart: unless-stopped
+
+  # MySQL 数据库服务
+  mysql:
+    image: mysql:8.0
+    container_name: downstash-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-secret}
+      - MYSQL_DATABASE=downstash
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - downstash-network
+    restart: unless-stopped
+
+volumes:
+  mysql_data:
+
+networks:
+  downstash-network:
+    driver: bridge

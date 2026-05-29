@@ -14,7 +14,6 @@ export interface WorkerOptions {
 export interface Worker {
   start: () => void;
   stop: () => Promise<void>;
-  /** Run a single tick synchronously. Useful for tests. */
   tick: () => Promise<void>;
 }
 
@@ -25,7 +24,7 @@ export function createWorker(opts: WorkerOptions): Worker {
   const inFlight = new Set<Promise<void>>();
 
   async function tick(): Promise<void> {
-    const due = opts.db.claimDue(batchSize, Date.now());
+    const due = await opts.db.claimDue(batchSize, Date.now());
     for (const msg of due) {
       const p = deliverMessage(msg, {
         db: opts.db,

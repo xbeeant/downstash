@@ -57,27 +57,27 @@ async function executeRaw(
 ): Promise<{ result: unknown } | { error: string }> {
   switch (cmd) {
     case "PING":
-      return { result: await store.ping(a[0]) };
+      return { result: store.ping(a[0]) };
     case "ECHO": {
       const err = exactArgs(a, 1, "echo");
       if (err) return { error: err };
-      return { result: await store.echo(a[0]!) };
+      return { result: store.echo(a[0]!) };
     }
     case "TIME":
-      return { result: await store.time() };
+      return { result: store.time() };
     case "SET": {
       const err = minArgs(a, 2, "set");
       if (err) return { error: err };
       const opts = parseSetOptions(a.slice(2));
       if (typeof opts === "string") return { error: opts };
-      const result = await store.set(a[0]!, a[1]!, opts);
+      const result = store.set(a[0]!, a[1]!, opts);
       if (result === null && (opts.nx || opts.xx)) return { result: null };
       return { result };
     }
     case "GET": {
       const err = exactArgs(a, 1, "get");
       if (err) return { error: err };
-      return { result: await await store.get(a[0]!) };
+      return { result: store.get(a[0]!) };
     }
     case "MSET": {
       if (a.length < 2 || a.length % 2 !== 0)
@@ -86,18 +86,18 @@ async function executeRaw(
       for (let i = 0; i < a.length; i += 2) {
         pairs.push([a[i]!, a[i + 1]!]);
       }
-      await store.mset(pairs);
+      store.mset(pairs);
       return { result: "OK" };
     }
     case "MGET": {
       const err = minArgs(a, 1, "mget");
       if (err) return { error: err };
-      return { result: await await store.mget(a) };
+      return { result: store.mget(a) };
     }
     case "SETNX": {
       const err = exactArgs(a, 2, "setnx");
       if (err) return { error: err };
-      return { result: await await store.setnx(a[0]!, a[1]!) ? 1 : 0 };
+      return { result: store.setnx(a[0]!, a[1]!) ? 1 : 0 };
     }
     case "SETEX": {
       const err = exactArgs(a, 3, "setex");
@@ -105,7 +105,7 @@ async function executeRaw(
       const seconds = toInt(a[1]!);
       if (seconds === null || seconds <= 0)
         return { error: "ERR invalid expire time in 'setex' command" };
-      await store.setex(a[0]!, seconds, a[2]!);
+      store.setex(a[0]!, seconds, a[2]!);
       return { result: "OK" };
     }
     case "PSETEX": {
@@ -113,49 +113,49 @@ async function executeRaw(
       if (err) return { error: err };
       const ms = toInt(a[1]!);
       if (ms === null || ms <= 0) return { error: "ERR invalid expire time in 'psetex' command" };
-      await store.psetex(a[0]!, ms, a[2]!);
+      store.psetex(a[0]!, ms, a[2]!);
       return { result: "OK" };
     }
     case "INCR": {
       const err = exactArgs(a, 1, "incr");
       if (err) return { error: err };
-      return { result: await await store.incr(a[0]!) };
+      return { result: store.incr(a[0]!) };
     }
     case "INCRBY": {
       const err = exactArgs(a, 2, "incrby");
       if (err) return { error: err };
       const inc = toInt(a[1]!);
       if (inc === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.incrby(a[0]!, inc) };
+      return { result: store.incrby(a[0]!, inc) };
     }
     case "INCRBYFLOAT": {
       const err = exactArgs(a, 2, "incrbyfloat");
       if (err) return { error: err };
       const inc = toFloat(a[1]!);
       if (inc === null) return { error: "ERR value is not a valid float" };
-      return { result: await await store.incrbyfloat(a[0]!, inc) };
+      return { result: store.incrbyfloat(a[0]!, inc) };
     }
     case "DECR": {
       const err = exactArgs(a, 1, "decr");
       if (err) return { error: err };
-      return { result: await await store.decr(a[0]!) };
+      return { result: store.decr(a[0]!) };
     }
     case "DECRBY": {
       const err = exactArgs(a, 2, "decrby");
       if (err) return { error: err };
       const dec = toInt(a[1]!);
       if (dec === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.decrby(a[0]!, dec) };
+      return { result: store.decrby(a[0]!, dec) };
     }
     case "APPEND": {
       const err = exactArgs(a, 2, "append");
       if (err) return { error: err };
-      return { result: await await store.append(a[0]!, a[1]!) };
+      return { result: store.append(a[0]!, a[1]!) };
     }
     case "STRLEN": {
       const err = exactArgs(a, 1, "strlen");
       if (err) return { error: err };
-      return { result: await await store.strlen(a[0]!) };
+      return { result: store.strlen(a[0]!) };
     }
     case "GETRANGE": {
       const err = exactArgs(a, 3, "getrange");
@@ -164,100 +164,100 @@ async function executeRaw(
       const end = toInt(a[2]!);
       if (start === null || end === null)
         return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.getrange(a[0]!, start, end) };
+      return { result: store.getrange(a[0]!, start, end) };
     }
     case "SETRANGE": {
       const err = exactArgs(a, 3, "setrange");
       if (err) return { error: err };
       const offset = toInt(a[1]!);
       if (offset === null || offset < 0) return { error: "ERR offset is out of range" };
-      return { result: await await store.setrange(a[0]!, offset, a[2]!) };
+      return { result: store.setrange(a[0]!, offset, a[2]!) };
     }
     case "GETDEL": {
       const err = exactArgs(a, 1, "getdel");
       if (err) return { error: err };
-      return { result: await await store.getdel(a[0]!) };
+      return { result: store.getdel(a[0]!) };
     }
     case "GETEX": {
       const err = minArgs(a, 1, "getex");
       if (err) return { error: err };
       const opts = parseSetOptions(a.slice(1));
       if (typeof opts === "string") return { error: opts };
-      return { result: await await store.getex(a[0]!, opts) };
+      return { result: store.getex(a[0]!, opts) };
     }
     case "DEL": {
       const err = minArgs(a, 1, "del");
       if (err) return { error: err };
-      return { result: await await store.del(a) };
+      return { result: store.del(a) };
     }
     case "UNLINK": {
       const err = minArgs(a, 1, "unlink");
       if (err) return { error: err };
-      return { result: await await store.unlink(a) };
+      return { result: store.unlink(a) };
     }
     case "EXISTS": {
       const err = minArgs(a, 1, "exists");
       if (err) return { error: err };
-      return { result: await await store.exists(a) };
+      return { result: store.exists(a) };
     }
     case "EXPIRE": {
       const err = exactArgs(a, 2, "expire");
       if (err) return { error: err };
       const seconds = toInt(a[1]!);
       if (seconds === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.expire(a[0]!, seconds) ? 1 : 0 };
+      return { result: store.expire(a[0]!, seconds) ? 1 : 0 };
     }
     case "EXPIREAT": {
       const err = exactArgs(a, 2, "expireat");
       if (err) return { error: err };
       const ts = toInt(a[1]!);
       if (ts === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.expireat(a[0]!, ts) ? 1 : 0 };
+      return { result: store.expireat(a[0]!, ts) ? 1 : 0 };
     }
     case "PEXPIRE": {
       const err = exactArgs(a, 2, "pexpire");
       if (err) return { error: err };
       const ms = toInt(a[1]!);
       if (ms === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.pexpire(a[0]!, ms) ? 1 : 0 };
+      return { result: store.pexpire(a[0]!, ms) ? 1 : 0 };
     }
     case "PEXPIREAT": {
       const err = exactArgs(a, 2, "pexpireat");
       if (err) return { error: err };
       const ms = toInt(a[1]!);
       if (ms === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.pexpireat(a[0]!, ms) ? 1 : 0 };
+      return { result: store.pexpireat(a[0]!, ms) ? 1 : 0 };
     }
     case "TTL": {
       const err = exactArgs(a, 1, "ttl");
       if (err) return { error: err };
-      return { result: await await store.ttl(a[0]!) };
+      return { result: store.ttl(a[0]!) };
     }
     case "PTTL": {
       const err = exactArgs(a, 1, "pttl");
       if (err) return { error: err };
-      return { result: await await store.pttl(a[0]!) };
+      return { result: store.pttl(a[0]!) };
     }
     case "PERSIST": {
       const err = exactArgs(a, 1, "persist");
       if (err) return { error: err };
-      return { result: await await store.persist(a[0]!) ? 1 : 0 };
+      return { result: store.persist(a[0]!) ? 1 : 0 };
     }
     case "RENAME": {
       const err = exactArgs(a, 2, "rename");
       if (err) return { error: err };
-      await store.rename(a[0]!, a[1]!);
+      store.rename(a[0]!, a[1]!);
       return { result: "OK" };
     }
     case "TYPE": {
       const err = exactArgs(a, 1, "type");
       if (err) return { error: err };
-      return { result: await await store.type(a[0]!) };
+      return { result: store.type(a[0]!) };
     }
     case "KEYS": {
       const err = exactArgs(a, 1, "keys");
       if (err) return { error: err };
-      return { result: await await store.keys(a[0]!) };
+      return { result: store.keys(a[0]!) };
     }
     case "SCAN": {
       const err = minArgs(a, 1, "scan");
@@ -265,26 +265,26 @@ async function executeRaw(
       const cursor = toInt(a[0]!);
       if (cursor === null) return { error: "ERR invalid cursor" };
       const opts = parseScanOptions(a.slice(1));
-      const [next, keys] = await store.scan(cursor, opts);
+      const [next, keys] = store.scan(cursor, opts);
       return { result: [String(next), keys] };
     }
     case "DBSIZE":
-      return { result: await await store.dbsize() };
+      return { result: store.dbsize() };
     case "FLUSHDB": {
-      await store.flushdb();
+      store.flushdb();
       return { result: "OK" };
     }
     case "FLUSHALL": {
-      await store.flushall();
+      store.flushall();
       return { result: "OK" };
     }
     case "RANDOMKEY":
-      return { result: await await store.randomkey() };
+      return { result: store.randomkey() };
     case "COPY": {
       const err = minArgs(a, 2, "copy");
       if (err) return { error: err };
       const replace = a.length > 2 && a[2]!.toUpperCase() === "REPLACE";
-      return { result: await await store.copy(a[0]!, a[1]!, replace) ? 1 : 0 };
+      return { result: store.copy(a[0]!, a[1]!, replace) ? 1 : 0 };
     }
 
     // Hash commands
@@ -297,12 +297,12 @@ async function executeRaw(
       for (let i = 1; i < a.length; i += 2) {
         fields.push([a[i]!, a[i + 1]!]);
       }
-      return { result: await await store.hset(a[0]!, fields) };
+      return { result: store.hset(a[0]!, fields) };
     }
     case "HGET": {
       const err = exactArgs(a, 2, "hget");
       if (err) return { error: err };
-      return { result: await await store.hget(a[0]!, a[1]!) };
+      return { result: store.hget(a[0]!, a[1]!) };
     }
     case "HMSET": {
       const err = minArgs(a, 3, "hmset");
@@ -313,62 +313,62 @@ async function executeRaw(
       for (let i = 1; i < a.length; i += 2) {
         fields.push([a[i]!, a[i + 1]!]);
       }
-      await store.hmset(a[0]!, fields);
+      store.hmset(a[0]!, fields);
       return { result: "OK" };
     }
     case "HMGET": {
       const err = minArgs(a, 2, "hmget");
       if (err) return { error: err };
-      return { result: await await store.hmget(a[0]!, a.slice(1)) };
+      return { result: store.hmget(a[0]!, a.slice(1)) };
     }
     case "HGETALL": {
       const err = exactArgs(a, 1, "hgetall");
       if (err) return { error: err };
-      return { result: await await store.hgetall(a[0]!) };
+      return { result: store.hgetall(a[0]!) };
     }
     case "HDEL": {
       const err = minArgs(a, 2, "hdel");
       if (err) return { error: err };
-      return { result: await await store.hdel(a[0]!, a.slice(1)) };
+      return { result: store.hdel(a[0]!, a.slice(1)) };
     }
     case "HEXISTS": {
       const err = exactArgs(a, 2, "hexists");
       if (err) return { error: err };
-      return { result: await await store.hexists(a[0]!, a[1]!) ? 1 : 0 };
+      return { result: store.hexists(a[0]!, a[1]!) ? 1 : 0 };
     }
     case "HLEN": {
       const err = exactArgs(a, 1, "hlen");
       if (err) return { error: err };
-      return { result: await await store.hlen(a[0]!) };
+      return { result: store.hlen(a[0]!) };
     }
     case "HKEYS": {
       const err = exactArgs(a, 1, "hkeys");
       if (err) return { error: err };
-      return { result: await await store.hkeys(a[0]!) };
+      return { result: store.hkeys(a[0]!) };
     }
     case "HVALS": {
       const err = exactArgs(a, 1, "hvals");
       if (err) return { error: err };
-      return { result: await await store.hvals(a[0]!) };
+      return { result: store.hvals(a[0]!) };
     }
     case "HINCRBY": {
       const err = exactArgs(a, 3, "hincrby");
       if (err) return { error: err };
       const inc = toInt(a[2]!);
       if (inc === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.hincrby(a[0]!, a[1]!, inc) };
+      return { result: store.hincrby(a[0]!, a[1]!, inc) };
     }
     case "HINCRBYFLOAT": {
       const err = exactArgs(a, 3, "hincrbyfloat");
       if (err) return { error: err };
       const inc = toFloat(a[2]!);
       if (inc === null) return { error: "ERR value is not a valid float" };
-      return { result: await await store.hincrbyfloat(a[0]!, a[1]!, inc) };
+      return { result: store.hincrbyfloat(a[0]!, a[1]!, inc) };
     }
     case "HSETNX": {
       const err = exactArgs(a, 3, "hsetnx");
       if (err) return { error: err };
-      return { result: await await store.hsetnx(a[0]!, a[1]!, a[2]!) ? 1 : 0 };
+      return { result: store.hsetnx(a[0]!, a[1]!, a[2]!) ? 1 : 0 };
     }
     case "HSCAN": {
       const err = minArgs(a, 2, "hscan");
@@ -376,7 +376,7 @@ async function executeRaw(
       const cursor = toInt(a[1]!);
       if (cursor === null) return { error: "ERR invalid cursor" };
       const opts = parseScanOptions(a.slice(2));
-      const [next, items] = await store.hscan(a[0]!, cursor, opts);
+      const [next, items] = store.hscan(a[0]!, cursor, opts);
       return { result: [String(next), items] };
     }
 
@@ -384,12 +384,12 @@ async function executeRaw(
     case "LPUSH": {
       const err = minArgs(a, 2, "lpush");
       if (err) return { error: err };
-      return { result: await await store.lpush(a[0]!, a.slice(1)) };
+      return { result: store.lpush(a[0]!, a.slice(1)) };
     }
     case "RPUSH": {
       const err = minArgs(a, 2, "rpush");
       if (err) return { error: err };
-      return { result: await await store.rpush(a[0]!, a.slice(1)) };
+      return { result: store.rpush(a[0]!, a.slice(1)) };
     }
     case "LPOP": {
       const err = minArgs(a, 1, "lpop");
@@ -398,9 +398,9 @@ async function executeRaw(
         const count = toInt(a[1]!);
         if (count === null || count < 0)
           return { error: "ERR value is not an integer or out of range" };
-        return { result: await await store.lpop(a[0]!, count) };
+        return { result: store.lpop(a[0]!, count) };
       }
-      return { result: await await store.lpop(a[0]!) };
+      return { result: store.lpop(a[0]!) };
     }
     case "RPOP": {
       const err = minArgs(a, 1, "rpop");
@@ -409,9 +409,9 @@ async function executeRaw(
         const count = toInt(a[1]!);
         if (count === null || count < 0)
           return { error: "ERR value is not an integer or out of range" };
-        return { result: await await store.rpop(a[0]!, count) };
+        return { result: store.rpop(a[0]!, count) };
       }
-      return { result: await await store.rpop(a[0]!) };
+      return { result: store.rpop(a[0]!) };
     }
     case "LRANGE": {
       const err = exactArgs(a, 3, "lrange");
@@ -420,26 +420,26 @@ async function executeRaw(
       const stop = toInt(a[2]!);
       if (start === null || stop === null)
         return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.lrange(a[0]!, start, stop) };
+      return { result: store.lrange(a[0]!, start, stop) };
     }
     case "LLEN": {
       const err = exactArgs(a, 1, "llen");
       if (err) return { error: err };
-      return { result: await await store.llen(a[0]!) };
+      return { result: store.llen(a[0]!) };
     }
     case "LINDEX": {
       const err = exactArgs(a, 2, "lindex");
       if (err) return { error: err };
       const index = toInt(a[1]!);
       if (index === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.lindex(a[0]!, index) };
+      return { result: store.lindex(a[0]!, index) };
     }
     case "LSET": {
       const err = exactArgs(a, 3, "lset");
       if (err) return { error: err };
       const index = toInt(a[1]!);
       if (index === null) return { error: "ERR value is not an integer or out of range" };
-      await store.lset(a[0]!, index, a[2]!);
+      store.lset(a[0]!, index, a[2]!);
       return { result: "OK" };
     }
     case "LINSERT": {
@@ -447,14 +447,14 @@ async function executeRaw(
       if (err) return { error: err };
       const dir = a[1]!.toUpperCase();
       if (dir !== "BEFORE" && dir !== "AFTER") return { error: "ERR syntax error" };
-      return { result: await await store.linsert(a[0]!, dir === "BEFORE", a[2]!, a[3]!) };
+      return { result: store.linsert(a[0]!, dir === "BEFORE", a[2]!, a[3]!) };
     }
     case "LREM": {
       const err = exactArgs(a, 3, "lrem");
       if (err) return { error: err };
       const count = toInt(a[1]!);
       if (count === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.lrem(a[0]!, count, a[2]!) };
+      return { result: store.lrem(a[0]!, count, a[2]!) };
     }
     case "LTRIM": {
       const err = exactArgs(a, 3, "ltrim");
@@ -463,7 +463,7 @@ async function executeRaw(
       const stop = toInt(a[2]!);
       if (start === null || stop === null)
         return { error: "ERR value is not an integer or out of range" };
-      await store.ltrim(a[0]!, start, stop);
+      store.ltrim(a[0]!, start, stop);
       return { result: "OK" };
     }
 
@@ -471,27 +471,27 @@ async function executeRaw(
     case "SADD": {
       const err = minArgs(a, 2, "sadd");
       if (err) return { error: err };
-      return { result: await await store.sadd(a[0]!, a.slice(1)) };
+      return { result: store.sadd(a[0]!, a.slice(1)) };
     }
     case "SREM": {
       const err = minArgs(a, 2, "srem");
       if (err) return { error: err };
-      return { result: await await store.srem(a[0]!, a.slice(1)) };
+      return { result: store.srem(a[0]!, a.slice(1)) };
     }
     case "SMEMBERS": {
       const err = exactArgs(a, 1, "smembers");
       if (err) return { error: err };
-      return { result: await await store.smembers(a[0]!) };
+      return { result: store.smembers(a[0]!) };
     }
     case "SISMEMBER": {
       const err = exactArgs(a, 2, "sismember");
       if (err) return { error: err };
-      return { result: await await store.sismember(a[0]!, a[1]!) ? 1 : 0 };
+      return { result: store.sismember(a[0]!, a[1]!) ? 1 : 0 };
     }
     case "SCARD": {
       const err = exactArgs(a, 1, "scard");
       if (err) return { error: err };
-      return { result: await await store.scard(a[0]!) };
+      return { result: store.scard(a[0]!) };
     }
     case "SPOP": {
       const err = minArgs(a, 1, "spop");
@@ -499,9 +499,9 @@ async function executeRaw(
       if (a.length > 1) {
         const count = toInt(a[1]!);
         if (count === null) return { error: "ERR value is not an integer or out of range" };
-        return { result: await await store.spop(a[0]!, count) };
+        return { result: store.spop(a[0]!, count) };
       }
-      return { result: await await store.spop(a[0]!) };
+      return { result: store.spop(a[0]!) };
     }
     case "SRANDMEMBER": {
       const err = minArgs(a, 1, "srandmember");
@@ -509,39 +509,39 @@ async function executeRaw(
       if (a.length > 1) {
         const count = toInt(a[1]!);
         if (count === null) return { error: "ERR value is not an integer or out of range" };
-        return { result: await await store.srandmember(a[0]!, count) };
+        return { result: store.srandmember(a[0]!, count) };
       }
-      return { result: await await store.srandmember(a[0]!) };
+      return { result: store.srandmember(a[0]!) };
     }
     case "SUNION": {
       const err = minArgs(a, 1, "sunion");
       if (err) return { error: err };
-      return { result: await await store.sunion(a) };
+      return { result: store.sunion(a) };
     }
     case "SINTER": {
       const err = minArgs(a, 1, "sinter");
       if (err) return { error: err };
-      return { result: await await store.sinter(a) };
+      return { result: store.sinter(a) };
     }
     case "SDIFF": {
       const err = minArgs(a, 1, "sdiff");
       if (err) return { error: err };
-      return { result: await await store.sdiff(a) };
+      return { result: store.sdiff(a) };
     }
     case "SUNIONSTORE": {
       const err = minArgs(a, 2, "sunionstore");
       if (err) return { error: err };
-      return { result: await await store.sunionstore(a[0]!, a.slice(1)) };
+      return { result: store.sunionstore(a[0]!, a.slice(1)) };
     }
     case "SINTERSTORE": {
       const err = minArgs(a, 2, "sinterstore");
       if (err) return { error: err };
-      return { result: await await store.sinterstore(a[0]!, a.slice(1)) };
+      return { result: store.sinterstore(a[0]!, a.slice(1)) };
     }
     case "SDIFFSTORE": {
       const err = minArgs(a, 2, "sdiffstore");
       if (err) return { error: err };
-      return { result: await await store.sdiffstore(a[0]!, a.slice(1)) };
+      return { result: store.sdiffstore(a[0]!, a.slice(1)) };
     }
     case "SSCAN": {
       const err = minArgs(a, 2, "sscan");
@@ -549,7 +549,7 @@ async function executeRaw(
       const cursor = toInt(a[1]!);
       if (cursor === null) return { error: "ERR invalid cursor" };
       const opts = parseScanOptions(a.slice(2));
-      const [next, items] = await store.sscan(a[0]!, cursor, opts);
+      const [next, items] = store.sscan(a[0]!, cursor, opts);
       return { result: [String(next), items] };
     }
 
@@ -559,28 +559,28 @@ async function executeRaw(
       if (err) return { error: err };
       const { opts, entries, error } = parseZaddArgs(a);
       if (error) return { error };
-      return { result: await await store.zadd(a[0]!, entries, opts) };
+      return { result: store.zadd(a[0]!, entries, opts) };
     }
     case "ZREM": {
       const err = minArgs(a, 2, "zrem");
       if (err) return { error: err };
-      return { result: await await store.zrem(a[0]!, a.slice(1)) };
+      return { result: store.zrem(a[0]!, a.slice(1)) };
     }
     case "ZSCORE": {
       const err = exactArgs(a, 2, "zscore");
       if (err) return { error: err };
-      const score = await store.zscore(a[0]!, a[1]!);
+      const score = store.zscore(a[0]!, a[1]!);
       return { result: score !== null ? String(score) : null };
     }
     case "ZRANK": {
       const err = exactArgs(a, 2, "zrank");
       if (err) return { error: err };
-      return { result: await await store.zrank(a[0]!, a[1]!) };
+      return { result: store.zrank(a[0]!, a[1]!) };
     }
     case "ZREVRANK": {
       const err = exactArgs(a, 2, "zrevrank");
       if (err) return { error: err };
-      return { result: await await store.zrevrank(a[0]!, a[1]!) };
+      return { result: store.zrevrank(a[0]!, a[1]!) };
     }
     case "ZRANGE": {
       const err = minArgs(a, 3, "zrange");
@@ -590,13 +590,13 @@ async function executeRaw(
       if (start === null || stop === null)
         return { error: "ERR value is not an integer or out of range" };
       const withScores = a.length > 3 && a[3]!.toUpperCase() === "WITHSCORES";
-      return { result: await await store.zrange(a[0]!, start, stop, withScores) };
+      return { result: store.zrange(a[0]!, start, stop, withScores) };
     }
     case "ZRANGEBYSCORE": {
       const err = minArgs(a, 3, "zrangebyscore");
       if (err) return { error: err };
       const opts = parseZRangeByScoreOptions(a.slice(3));
-      return { result: await await store.zrangebyscore(a[0]!, a[1]!, a[2]!, opts) };
+      return { result: store.zrangebyscore(a[0]!, a[1]!, a[2]!, opts) };
     }
     case "ZREVRANGE": {
       const err = minArgs(a, 3, "zrevrange");
@@ -606,44 +606,44 @@ async function executeRaw(
       if (start === null || stop === null)
         return { error: "ERR value is not an integer or out of range" };
       const withScores = a.length > 3 && a[3]!.toUpperCase() === "WITHSCORES";
-      return { result: await await store.zrevrange(a[0]!, start, stop, withScores) };
+      return { result: store.zrevrange(a[0]!, start, stop, withScores) };
     }
     case "ZREVRANGEBYSCORE": {
       const err = minArgs(a, 3, "zrevrangebyscore");
       if (err) return { error: err };
       const opts = parseZRangeByScoreOptions(a.slice(3));
-      return { result: await await store.zrevrangebyscore(a[0]!, a[1]!, a[2]!, opts) };
+      return { result: store.zrevrangebyscore(a[0]!, a[1]!, a[2]!, opts) };
     }
     case "ZCARD": {
       const err = exactArgs(a, 1, "zcard");
       if (err) return { error: err };
-      return { result: await await store.zcard(a[0]!) };
+      return { result: store.zcard(a[0]!) };
     }
     case "ZCOUNT": {
       const err = exactArgs(a, 3, "zcount");
       if (err) return { error: err };
-      return { result: await await store.zcount(a[0]!, a[1]!, a[2]!) };
+      return { result: store.zcount(a[0]!, a[1]!, a[2]!) };
     }
     case "ZINCRBY": {
       const err = exactArgs(a, 3, "zincrby");
       if (err) return { error: err };
       const inc = toFloat(a[1]!);
       if (inc === null) return { error: "ERR value is not a valid float" };
-      return { result: await await store.zincrby(a[0]!, inc, a[2]!) };
+      return { result: store.zincrby(a[0]!, inc, a[2]!) };
     }
     case "ZPOPMIN": {
       const err = minArgs(a, 1, "zpopmin");
       if (err) return { error: err };
       const count = a.length > 1 ? toInt(a[1]!) : 1;
       if (count === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.zpopmin(a[0]!, count) };
+      return { result: store.zpopmin(a[0]!, count) };
     }
     case "ZPOPMAX": {
       const err = minArgs(a, 1, "zpopmax");
       if (err) return { error: err };
       const count = a.length > 1 ? toInt(a[1]!) : 1;
       if (count === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.zpopmax(a[0]!, count) };
+      return { result: store.zpopmax(a[0]!, count) };
     }
     case "ZUNIONSTORE": {
       const err = minArgs(a, 3, "zunionstore");
@@ -653,7 +653,7 @@ async function executeRaw(
       const keys = a.slice(2, 2 + numkeys);
       const rest = a.slice(2 + numkeys);
       const weights = parseWeights(rest);
-      return { result: await await store.zunionstore(a[0]!, keys, weights ?? undefined) };
+      return { result: store.zunionstore(a[0]!, keys, weights ?? undefined) };
     }
     case "ZINTERSTORE": {
       const err = minArgs(a, 3, "zinterstore");
@@ -663,7 +663,7 @@ async function executeRaw(
       const keys = a.slice(2, 2 + numkeys);
       const rest = a.slice(2 + numkeys);
       const weights = parseWeights(rest);
-      return { result: await await store.zinterstore(a[0]!, keys, weights ?? undefined) };
+      return { result: store.zinterstore(a[0]!, keys, weights ?? undefined) };
     }
     case "ZSCAN": {
       const err = minArgs(a, 2, "zscan");
@@ -671,7 +671,7 @@ async function executeRaw(
       const cursor = toInt(a[1]!);
       if (cursor === null) return { error: "ERR invalid cursor" };
       const opts = parseScanOptions(a.slice(2));
-      const [next, items] = await store.zscan(a[0]!, cursor, opts);
+      const [next, items] = store.zscan(a[0]!, cursor, opts);
       return { result: [String(next), items] };
     }
 
