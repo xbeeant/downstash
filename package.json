@@ -1,6 +1,6 @@
 {
   "name": "downstash",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A local development server that mocks the Upstash QStash and Redis APIs for fast, offline testing.",
   "type": "module",
   "bin": {
@@ -19,7 +19,11 @@
   "engines": {
     "bun": ">=1.1.0"
   },
-  "files": ["src", "README.md", "LICENSE"],
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
