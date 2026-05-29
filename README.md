@@ -254,13 +254,77 @@ Flags always win over env vars.
 - Events log — `GET /v2/events`
 - Web console UI
 
+## MySQL Storage
+
+`downstash` supports MySQL as a persistent storage backend for both QStash messages and Redis data.
+
+### Configuration
+
+Configure MySQL connection via environment variables:
+
+| Environment Variable | Description | Default |
+|---|---|---|
+| `DOWNSTASH_MYSQL_HOST` | MySQL server host | `localhost` |
+| `DOWNSTASH_MYSQL_PORT` | MySQL server port | `3306` |
+| `DOWNSTASH_MYSQL_USER` | MySQL username | `root` |
+| `DOWNSTASH_MYSQL_PASSWORD` | MySQL password | `""` |
+| `DOWNSTASH_MYSQL_DATABASE` | Database name | `downstash` |
+
+### Quick Start with Docker Compose
+
+The easiest way to run `downstash` with MySQL is using `docker-compose`:
+
+```bash
+# Start MySQL and downstash
+docker-compose up -d
+
+# View logs
+docker-compose logs -f downstash
+```
+
+### Manual MySQL Setup
+
+1. Create the database:
+```sql
+CREATE DATABASE downstash;
+```
+
+2. Configure environment variables:
+```bash
+export DOWNSTASH_MYSQL_HOST=localhost
+export DOWNSTASH_MYSQL_PORT=3306
+export DOWNSTASH_MYSQL_USER=root
+export DOWNSTASH_MYSQL_PASSWORD=your_password
+export DOWNSTASH_MYSQL_DATABASE=downstash
+```
+
+3. Run downstash:
+```bash
+downstash
+```
+
+### Features
+
+- **QStash Message Persistence**: All QStash messages (pending, in-flight, delivered, failed) are stored in MySQL
+- **Redis Data Persistence**: Redis string, hash, list, set, and sorted set data types are persisted in MySQL
+- **Automatic Schema**: Tables are created automatically on first connection
+- **Connection Pooling**: Uses MySQL connection pool for better performance
+
+### Schema
+
+`downstash` creates the following tables automatically:
+
+- `messages`: QStash message queue
+- `tokens`: Authentication tokens
+- `redis_data`: Redis key-value storage
+
 ## Limitations
 
 - Single process per developer. Not for shared/staging use.
 - The QStash bearer token is not validated against any registry — any non-empty `Authorization: Bearer <anything>` is accepted. The Redis token is validated against the configured `--redis-token` (default `"dev"`).
-- The Redis store is in-memory only — data does not persist across server restarts. QStash messages are persisted in SQLite.
+- The Redis store is in-memory by default. Use MySQL storage for persistence.
 - `downstash` mirrors Upstash's wire shape closely but is not a perfect bug-for-bug clone of production. File issues if your code path depends on a corner that we don't yet match.
 
 ## License
 
-MIT
+MIT - Derived from [sskcfC15Xfoxd7X1sVFgipdzMRAkP/downstash](https://github.com/sskcfC15Xfoxd7X1sVFgipdzMRAkP/downstash).
