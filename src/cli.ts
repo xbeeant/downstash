@@ -255,7 +255,9 @@ async function main(): Promise<void> {
             console.log(`ID: ${t.id}`);
             console.log(`  App Name:    ${t.appName}`);
             console.log(`  Created:     ${new Date(t.createdAt).toISOString()}`);
-            console.log(`  Last Used:   ${t.lastUsedAt ? new Date(t.lastUsedAt).toISOString() : "never"}`);
+            console.log(
+              `  Last Used:   ${t.lastUsedAt ? new Date(t.lastUsedAt).toISOString() : "never"}`,
+            );
             console.log("");
           }
         }
