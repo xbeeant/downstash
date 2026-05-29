@@ -41,7 +41,7 @@ export interface MySQLConfig {
   database: string;
 }
 
-const SCHEMA = `
+const MESSAGES_SCHEMA = `
 CREATE TABLE IF NOT EXISTS messages (
   id                     VARCHAR(255) PRIMARY KEY,
   destination            TEXT NOT NULL,
@@ -62,7 +62,36 @@ CREATE TABLE IF NOT EXISTS messages (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 `;
 
-export interface Db {
+const TOKENS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS tokens (
+  id           INT AUTO_INCREMENT PRIMARY KEY,
+  token        VARCHAR(255) NOT NULL UNIQUE,
+  app_name     VARCHAR(255) NOT NULL,
+  created_at   BIGINT NOT NULL,
+  last_used_at BIGINT,
+  INDEX idx_token (token)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+`;
+
+const SCHEMA = MESSAGES_SCHEMA + TOKENS_SCHEMA;
+
+export interface TokenRow {
+  id: number;
+  token: string;
+  appName: string;
+  createdAt: number;
+  lastUsedAt: number | null;
+}
+
+export interface TokenStore {
+  createToken: (appName: string) => Promise<{ token: string; appName: string }>;
+  verifyToken: (token: string) => Promise<TokenRow | null>;
+  listTokens: () => Promise<Omit<TokenRow, "token">[]>;
+  revokeToken: (token: string) => Promise<boolean>;
+  updateLastUsed: (token: string) => Promise<void>;
+}
+
+export interface Db extends TokenStore {
   insertMessage: (msg: InsertMessage) => Promise<void>;
   getMessage: (id: string) => Promise<MessageRow | null>;
   cancelMessage: (id: string) => Promise<boolean>;
@@ -93,7 +122,8 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
   });
 
   const conn = await pool.getConnection();
-  await conn.query(SCHEMA);
+  await conn.query(MESSAGES_SCHEMA);
+  await conn.query(TOKENS_SCHEMA);
   conn.release();
 
   async function insertMessage(msg: InsertMessage): Promise<void> {
@@ -232,6 +262,72 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
     };
   }
 
+  function generateToken(): string {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "";
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  function rowToToken(row: mysql.RowDataPacket): TokenRow {
+    return {
+      id: row.id,
+      token: row.token,
+      appName: row.app_name,
+      createdAt: row.created_at,
+      lastUsedAt: row.last_used_at,
+    };
+  }
+
+  async function createToken(appName: string): Promise<{ token: string; appName: string }> {
+    const token = generateToken();
+    const now = Date.now();
+    await pool.execute(
+      "INSERT INTO tokens (token, app_name, created_at) VALUES (?, ?, ?)",
+      [token, appName, now],
+    );
+    return { token, appName };
+  }
+
+  async function verifyToken(token: string): Promise<TokenRow | null> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM tokens WHERE token = ?",
+      [token],
+    );
+    if (rows.length === 0) return null;
+    return rowToToken(rows[0]!);
+  }
+
+  async function listTokens(): Promise<Omit<TokenRow, "token">[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT id, app_name, created_at, last_used_at FROM tokens ORDER BY created_at DESC",
+    );
+    return rows.map((r) => ({
+      id: r.id,
+      appName: r.app_name,
+      createdAt: r.created_at,
+      lastUsedAt: r.last_used_at,
+    }));
+  }
+
+  async function revokeToken(token: string): Promise<boolean> {
+    const [result] = await pool.execute<mysql.ResultSetHeader>(
+      "DELETE FROM tokens WHERE token = ?",
+      [token],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async function updateLastUsed(token: string): Promise<void> {
+    const now = Date.now();
+    await pool.execute(
+      "UPDATE tokens SET last_used_at = ? WHERE token = ?",
+      [now, token],
+    );
+  }
+
   return {
     insertMessage,
     getMessage,
@@ -242,6 +338,11 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
     rescheduleRetry,
     reset,
     close,
+    createToken,
+    verifyToken,
+    listTokens,
+    revokeToken,
+    updateLastUsed,
   };
 }
 

@@ -38,6 +38,13 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
     return c.json({ error: "missing or empty Authorization bearer token" }, 401);
   }
 
+  const token = auth.replace(/^Bearer\s+/i, "");
+  const tokenRow = await db.verifyToken(token);
+  if (!tokenRow) {
+    return c.json({ error: "invalid token" }, 401);
+  }
+  await db.updateLastUsed(token);
+
   const rawDest = c.req.param("destination");
   if (!rawDest) {
     return c.json({ error: "destination is required" }, 400);
@@ -150,6 +157,13 @@ async function handleBatch(c: Context, { db, logger }: PublishDeps): Promise<Res
   if (!/^Bearer\s+\S+/i.test(auth)) {
     return c.json({ error: "missing or empty Authorization bearer token" }, 401);
   }
+
+  const token = auth.replace(/^Bearer\s+/i, "");
+  const tokenRow = await db.verifyToken(token);
+  if (!tokenRow) {
+    return c.json({ error: "invalid token" }, 401);
+  }
+  await db.updateLastUsed(token);
 
   let items: unknown;
   try {

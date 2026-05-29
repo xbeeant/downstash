@@ -7,7 +7,10 @@ import { createServer } from "./server.ts";
 import { createWorker } from "./worker/loop.ts";
 
 interface ParsedArgs {
-  command: "serve" | "reset" | "keys" | "help";
+  command: "serve" | "reset" | "keys" | "tokens" | "help";
+  tokenSubcommand?: "add" | "list" | "revoke";
+  tokenAppName?: string;
+  tokenValue?: string;
   overrides: ConfigOverrides;
   quiet: boolean;
 }
@@ -31,6 +34,9 @@ function parseArgs(argv: string[]): ParsedArgs {
   let quiet = false;
   let command: ParsedArgs["command"] = "serve";
   let commandFound = false;
+  let tokenSubcommand: ParsedArgs["tokenSubcommand"];
+  let tokenAppName: ParsedArgs["tokenAppName"];
+  let tokenValue: ParsedArgs["tokenValue"];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -42,6 +48,33 @@ function parseArgs(argv: string[]): ParsedArgs {
       if (arg === "serve" || arg === "reset" || arg === "keys" || arg === "help") {
         command = arg;
         commandFound = true;
+        continue;
+      }
+      if (arg === "tokens") {
+        command = "tokens";
+        commandFound = true;
+        continue;
+      }
+      if (command === "tokens" && !arg.startsWith("-")) {
+        if (arg === "add") {
+          tokenSubcommand = "add";
+        } else if (arg === "list") {
+          tokenSubcommand = "list";
+        } else if (arg === "revoke") {
+          tokenSubcommand = "revoke";
+        } else {
+          console.error(`unknown tokens subcommand: ${arg}`);
+          console.error(`use: downstash tokens [add|list|revoke]`);
+          process.exit(2);
+        }
+        continue;
+      }
+      if (command === "tokens" && tokenSubcommand === "add") {
+        tokenAppName = arg;
+        continue;
+      }
+      if (command === "tokens" && tokenSubcommand === "revoke") {
+        tokenValue = arg;
         continue;
       }
       console.error(`unknown command: ${arg}`);
@@ -116,7 +149,7 @@ function parseArgs(argv: string[]): ParsedArgs {
     overrides.logLevel = "warn";
   }
 
-  return { command, overrides, quiet };
+  return { command, overrides, quiet, tokenSubcommand, tokenAppName, tokenValue };
 }
 
 function requireValue(name: string, value: string | undefined): string {
@@ -145,6 +178,9 @@ usage:
   downstash serve                  explicit serve subcommand
   downstash reset                  truncate the messages table
   downstash keys                   print signing keys and Redis config for .env.local
+  downstash tokens add <app_name>  create a new token for an app
+  downstash tokens list            list all registered tokens
+  downstash tokens revoke <token>  revoke a token
   downstash help                   show this help
 
 MySQL configuration (required):
@@ -191,6 +227,59 @@ async function main(): Promise<void> {
     await db.reset();
     await db.close();
     console.log(`reset: cleared messages in MySQL database ${config.mysql.database}`);
+    return;
+  }
+
+  if (args.command === "tokens") {
+    const db = await openDb(config.mysql);
+    try {
+      if (args.tokenSubcommand === "add") {
+        if (!args.tokenAppName) {
+          console.error("error: app name is required for 'tokens add'");
+          console.error("usage: downstash tokens add <app_name>");
+          process.exit(2);
+        }
+        const result = await db.createToken(args.tokenAppName);
+        console.log(`Token created for app: ${result.appName}`);
+        console.log(`Token: ${result.token}`);
+        console.log(`\nStore this token securely - it will not be shown again!`);
+      } else if (args.tokenSubcommand === "list") {
+        const tokens = await db.listTokens();
+        if (tokens.length === 0) {
+          console.log("No tokens registered yet.");
+          console.log("Use 'downstash tokens add <app_name>' to create one.");
+        } else {
+          console.log("Registered tokens:");
+          console.log("-".repeat(60));
+          for (const t of tokens) {
+            console.log(`ID: ${t.id}`);
+            console.log(`  App Name:    ${t.appName}`);
+            console.log(`  Created:     ${new Date(t.createdAt).toISOString()}`);
+            console.log(`  Last Used:   ${t.lastUsedAt ? new Date(t.lastUsedAt).toISOString() : "never"}`);
+            console.log("");
+          }
+        }
+      } else if (args.tokenSubcommand === "revoke") {
+        if (!args.tokenValue) {
+          console.error("error: token is required for 'tokens revoke'");
+          console.error("usage: downstash tokens revoke <token>");
+          process.exit(2);
+        }
+        const revoked = await db.revokeToken(args.tokenValue);
+        if (revoked) {
+          console.log("Token revoked successfully.");
+        } else {
+          console.error("error: token not found.");
+          process.exit(1);
+        }
+      } else {
+        console.error("error: specify a subcommand");
+        console.error("usage: downstash tokens [add|list|revoke]");
+        process.exit(2);
+      }
+    } finally {
+      await db.close();
+    }
     return;
   }
 
