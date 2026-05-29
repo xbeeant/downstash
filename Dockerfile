@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package.json bun.lock ./
 
 # 安装依赖
-RUN bun install --production
+RUN bun install --frozen-lockfile --production
 
 # 复制源代码
 COPY src ./src
