@@ -97,7 +97,7 @@ async function executeRaw(
     case "SETNX": {
       const err = exactArgs(a, 2, "setnx");
       if (err) return { error: err };
-      return { result: await await store.setnx(a[0]!, a[1]!) ? 1 : 0 };
+      return { result: (await await store.setnx(a[0]!, a[1]!)) ? 1 : 0 };
     }
     case "SETEX": {
       const err = exactArgs(a, 3, "setex");
@@ -205,28 +205,28 @@ async function executeRaw(
       if (err) return { error: err };
       const seconds = toInt(a[1]!);
       if (seconds === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.expire(a[0]!, seconds) ? 1 : 0 };
+      return { result: (await await store.expire(a[0]!, seconds)) ? 1 : 0 };
     }
     case "EXPIREAT": {
       const err = exactArgs(a, 2, "expireat");
       if (err) return { error: err };
       const ts = toInt(a[1]!);
       if (ts === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.expireat(a[0]!, ts) ? 1 : 0 };
+      return { result: (await await store.expireat(a[0]!, ts)) ? 1 : 0 };
     }
     case "PEXPIRE": {
       const err = exactArgs(a, 2, "pexpire");
       if (err) return { error: err };
       const ms = toInt(a[1]!);
       if (ms === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.pexpire(a[0]!, ms) ? 1 : 0 };
+      return { result: (await await store.pexpire(a[0]!, ms)) ? 1 : 0 };
     }
     case "PEXPIREAT": {
       const err = exactArgs(a, 2, "pexpireat");
       if (err) return { error: err };
       const ms = toInt(a[1]!);
       if (ms === null) return { error: "ERR value is not an integer or out of range" };
-      return { result: await await store.pexpireat(a[0]!, ms) ? 1 : 0 };
+      return { result: (await await store.pexpireat(a[0]!, ms)) ? 1 : 0 };
     }
     case "TTL": {
       const err = exactArgs(a, 1, "ttl");
@@ -241,7 +241,7 @@ async function executeRaw(
     case "PERSIST": {
       const err = exactArgs(a, 1, "persist");
       if (err) return { error: err };
-      return { result: await await store.persist(a[0]!) ? 1 : 0 };
+      return { result: (await await store.persist(a[0]!)) ? 1 : 0 };
     }
     case "RENAME": {
       const err = exactArgs(a, 2, "rename");
@@ -284,7 +284,7 @@ async function executeRaw(
       const err = minArgs(a, 2, "copy");
       if (err) return { error: err };
       const replace = a.length > 2 && a[2]!.toUpperCase() === "REPLACE";
-      return { result: await await store.copy(a[0]!, a[1]!, replace) ? 1 : 0 };
+      return { result: (await await store.copy(a[0]!, a[1]!, replace)) ? 1 : 0 };
     }
 
     // Hash commands
@@ -334,7 +334,7 @@ async function executeRaw(
     case "HEXISTS": {
       const err = exactArgs(a, 2, "hexists");
       if (err) return { error: err };
-      return { result: await await store.hexists(a[0]!, a[1]!) ? 1 : 0 };
+      return { result: (await await store.hexists(a[0]!, a[1]!)) ? 1 : 0 };
     }
     case "HLEN": {
       const err = exactArgs(a, 1, "hlen");
@@ -368,7 +368,7 @@ async function executeRaw(
     case "HSETNX": {
       const err = exactArgs(a, 3, "hsetnx");
       if (err) return { error: err };
-      return { result: await await store.hsetnx(a[0]!, a[1]!, a[2]!) ? 1 : 0 };
+      return { result: (await await store.hsetnx(a[0]!, a[1]!, a[2]!)) ? 1 : 0 };
     }
     case "HSCAN": {
       const err = minArgs(a, 2, "hscan");
@@ -486,7 +486,7 @@ async function executeRaw(
     case "SISMEMBER": {
       const err = exactArgs(a, 2, "sismember");
       if (err) return { error: err };
-      return { result: await await store.sismember(a[0]!, a[1]!) ? 1 : 0 };
+      return { result: (await await store.sismember(a[0]!, a[1]!)) ? 1 : 0 };
     }
     case "SCARD": {
       const err = exactArgs(a, 1, "scard");

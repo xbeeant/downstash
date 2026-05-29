@@ -284,10 +284,11 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
   async function createToken(appName: string): Promise<{ token: string; appName: string }> {
     const token = generateToken();
     const now = Date.now();
-    await pool.execute(
-      "INSERT INTO tokens (token, app_name, created_at) VALUES (?, ?, ?)",
-      [token, appName, now],
-    );
+    await pool.execute("INSERT INTO tokens (token, app_name, created_at) VALUES (?, ?, ?)", [
+      token,
+      appName,
+      now,
+    ]);
     return { token, appName };
   }
 
@@ -322,10 +323,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
 
   async function updateLastUsed(token: string): Promise<void> {
     const now = Date.now();
-    await pool.execute(
-      "UPDATE tokens SET last_used_at = ? WHERE token = ?",
-      [now, token],
-    );
+    await pool.execute("UPDATE tokens SET last_used_at = ? WHERE token = ?", [now, token]);
   }
 
   return {

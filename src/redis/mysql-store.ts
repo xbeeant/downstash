@@ -126,9 +126,19 @@ export interface RedisStore {
   zrank(key: string, member: string): Promise<number | null>;
   zrevrank(key: string, member: string): Promise<number | null>;
   zrange(key: string, start: number, stop: number, withScores?: boolean): Promise<string[]>;
-  zrangebyscore(key: string, min: string, max: string, opts?: ZRangeByScoreOptions): Promise<string[]>;
+  zrangebyscore(
+    key: string,
+    min: string,
+    max: string,
+    opts?: ZRangeByScoreOptions,
+  ): Promise<string[]>;
   zrevrange(key: string, start: number, stop: number, withScores?: boolean): Promise<string[]>;
-  zrevrangebyscore(key: string, max: string, min: string, opts?: ZRangeByScoreOptions): Promise<string[]>;
+  zrevrangebyscore(
+    key: string,
+    max: string,
+    min: string,
+    opts?: ZRangeByScoreOptions,
+  ): Promise<string[]>;
   zcard(key: string): Promise<number>;
   zcount(key: string, min: string, max: string): Promise<number>;
   zincrby(key: string, increment: number, member: string): Promise<string>;
@@ -233,9 +243,16 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
   async function setEntry(key: string, entry: RedisEntry): Promise<void> {
     const valueString = entry.type === "string" ? (entry.value as string) : null;
     const valueList = entry.type === "list" ? JSON.stringify(entry.value as string[]) : null;
-    const valueSet = entry.type === "set" ? JSON.stringify(Array.from(entry.value as Set<string>)) : null;
-    const valueHash = entry.type === "hash" ? JSON.stringify(Array.from((entry.value as Map<string, string>).entries())) : null;
-    const valueZset = entry.type === "zset" ? JSON.stringify(Array.from((entry.value as Map<string, number>).entries())) : null;
+    const valueSet =
+      entry.type === "set" ? JSON.stringify(Array.from(entry.value as Set<string>)) : null;
+    const valueHash =
+      entry.type === "hash"
+        ? JSON.stringify(Array.from((entry.value as Map<string, string>).entries()))
+        : null;
+    const valueZset =
+      entry.type === "zset"
+        ? JSON.stringify(Array.from((entry.value as Map<string, number>).entries()))
+        : null;
 
     await pool.execute(
       `INSERT INTO redis_data (key_name, key_type, value_string, value_list, value_set, value_hash, value_zset, expires_at)
@@ -268,7 +285,9 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     return entry ? (entry.value as string) : null;
   }
 
-  async function getOrCreateList(key: string): Promise<{ list: string[]; entry: RedisEntry | null }> {
+  async function getOrCreateList(
+    key: string,
+  ): Promise<{ list: string[]; entry: RedisEntry | null }> {
     const entry = await getEntry(key);
     if (!entry) {
       const list: string[] = [];
@@ -279,7 +298,9 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     return { list: entry.value as string[], entry };
   }
 
-  async function getOrCreateSet(key: string): Promise<{ set: Set<string>; entry: RedisEntry | null }> {
+  async function getOrCreateSet(
+    key: string,
+  ): Promise<{ set: Set<string>; entry: RedisEntry | null }> {
     const entry = await getEntry(key);
     if (!entry) {
       const s = new Set<string>();
@@ -290,7 +311,9 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     return { set: entry.value as Set<string>, entry };
   }
 
-  async function getOrCreateHash(key: string): Promise<{ hash: Map<string, string>; entry: RedisEntry | null }> {
+  async function getOrCreateHash(
+    key: string,
+  ): Promise<{ hash: Map<string, string>; entry: RedisEntry | null }> {
     const entry = await getEntry(key);
     if (!entry) {
       const m = new Map<string, string>();
@@ -301,7 +324,9 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     return { hash: entry.value as Map<string, string>, entry };
   }
 
-  async function getOrCreateZset(key: string): Promise<{ zset: Map<string, number>; entry: RedisEntry | null }> {
+  async function getOrCreateZset(
+    key: string,
+  ): Promise<{ zset: Map<string, number>; entry: RedisEntry | null }> {
     const entry = await getEntry(key);
     if (!entry) {
       const m = new Map<string, number>();
@@ -333,7 +358,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     return index < 0 ? Math.max(0, len + index) : index;
   }
 
-  async function scanIterable(items: string[], cursor: number, opts?: ScanOptions): Promise<[number, string[]]> {
+  async function scanIterable(
+    items: string[],
+    cursor: number,
+    opts?: ScanOptions,
+  ): Promise<[number, string[]]> {
     const count = opts?.count ?? 10;
     const pattern = opts?.match ? globToRegex(opts.match) : null;
     const results: string[] = [];
@@ -422,7 +451,8 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
       const val = current === null ? 0 : Number.parseInt(current, 10);
       if (!Number.isFinite(val)) throw new Error("ERR value is not an integer or out of range");
       const result = val + increment;
-      if (!Number.isSafeInteger(result)) throw new Error("ERR value is not an integer or out of range");
+      if (!Number.isSafeInteger(result))
+        throw new Error("ERR value is not an integer or out of range");
       const entry = await getEntry(key);
       const expiresAt = entry?.expiresAt ?? null;
       const newEntry: RedisEntry = { type: "string", value: String(result), expiresAt };
@@ -610,9 +640,7 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
 
     async keys(pattern) {
       const regex = globToRegex(pattern);
-      const [rows] = await pool.execute<mysql.RowDataPacket[]>(
-        "SELECT key_name FROM redis_data",
-      );
+      const [rows] = await pool.execute<mysql.RowDataPacket[]>("SELECT key_name FROM redis_data");
       const result: string[] = [];
       for (const row of rows) {
         const entry = await getEntry(row.key_name);
@@ -624,9 +652,7 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     },
 
     async scan(cursor, opts) {
-      const [rows] = await pool.execute<mysql.RowDataPacket[]>(
-        "SELECT key_name FROM redis_data",
-      );
+      const [rows] = await pool.execute<mysql.RowDataPacket[]>("SELECT key_name FROM redis_data");
       const allKeys: string[] = [];
       for (const row of rows) {
         const entry = await getEntry(row.key_name);
@@ -680,7 +706,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
         if (!hash.has(f)) added++;
         hash.set(f, v);
       }
-      const newEntry: RedisEntry = { type: "hash", value: hash, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "hash",
+        value: hash,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return added;
     },
@@ -696,7 +726,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
       for (const [f, v] of fields) {
         hash.set(f, v);
       }
-      const newEntry: RedisEntry = { type: "hash", value: hash, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "hash",
+        value: hash,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
     },
 
@@ -761,7 +795,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
       if (!Number.isFinite(val)) throw new Error("ERR hash value is not an integer");
       const result = val + increment;
       hash.set(field, String(result));
-      const newEntry: RedisEntry = { type: "hash", value: hash, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "hash",
+        value: hash,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return result;
     },
@@ -774,7 +812,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
       const result = val + increment;
       const str = String(result);
       hash.set(field, str);
-      const newEntry: RedisEntry = { type: "hash", value: hash, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "hash",
+        value: hash,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return str;
     },
@@ -783,7 +825,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
       const { hash, entry } = await getOrCreateHash(key);
       if (hash.has(field)) return false;
       hash.set(field, value);
-      const newEntry: RedisEntry = { type: "hash", value: hash, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "hash",
+        value: hash,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return true;
     },
@@ -798,7 +844,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     async lpush(key, values) {
       const { list, entry } = await getOrCreateList(key);
       list.unshift(...values);
-      const newEntry: RedisEntry = { type: "list", value: list, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "list",
+        value: list,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return list.length;
     },
@@ -806,7 +856,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     async rpush(key, values) {
       const { list, entry } = await getOrCreateList(key);
       list.push(...values);
-      const newEntry: RedisEntry = { type: "list", value: list, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "list",
+        value: list,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return list.length;
     },
@@ -1157,7 +1211,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
           changed++;
         }
       }
-      const newEntry: RedisEntry = { type: "zset", value: zset, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "zset",
+        value: zset,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return opts?.ch ? changed : added;
     },
@@ -1277,7 +1335,11 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
       const current = zset.get(member) ?? 0;
       const result = current + increment;
       zset.set(member, result);
-      const newEntry: RedisEntry = { type: "zset", value: zset, expiresAt: entry?.expiresAt ?? null };
+      const newEntry: RedisEntry = {
+        type: "zset",
+        value: zset,
+        expiresAt: entry?.expiresAt ?? null,
+      };
       await setEntry(key, newEntry);
       return String(result);
     },
@@ -1361,7 +1423,9 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     async zscan(key, cursor, opts) {
       const entry = await assertType(key, "zset");
       if (!entry) return [0, []];
-      const items = sortedMembers(entry.value as Map<string, number>).flat().map(String);
+      const items = sortedMembers(entry.value as Map<string, number>)
+        .flat()
+        .map(String);
       return await scanIterable(items, cursor, opts);
     },
 
