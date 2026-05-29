@@ -5,7 +5,7 @@ FROM oven/bun:1.1.0 as builder
 WORKDIR /app
 
 # 复制项目文件
-COPY package.json bun.lock ./
+COPY package.json ./
 
 # 安装依赖
 RUN bun install --production
