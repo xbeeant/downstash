@@ -180,6 +180,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
   });
 
   const umzug = new Umzug({
+    logger: console,
     migrations: [
       { name: "001-initial-schema", up: initialSchema.up, down: initialSchema.down },
       { name: "002-qstash-extensions", up: qstashExtensions.up, down: qstashExtensions.down },
@@ -187,10 +188,10 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
     context: pool,
     storage: {
       async logMigration({ name }) {
-        await pool.execute(
-          "INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)",
-          [name, Date.now()],
-        );
+        await pool.execute("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)", [
+          name,
+          Date.now(),
+        ]);
       },
       async unlogMigration({ name }) {
         await pool.execute("DELETE FROM schema_migrations WHERE name = ?", [name]);

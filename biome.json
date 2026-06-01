@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.0.6/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -7,7 +7,14 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "ignore": ["dist", "node_modules", ".downstash", "bun.lock", "bun.lockb"]
+    "includes": [
+      "**",
+      "!**/dist",
+      "!**/node_modules",
+      "!**/.downstash",
+      "!**/bun.lock",
+      "!**/bun.lockb"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -16,16 +23,24 @@
     "lineWidth": 100,
     "lineEnding": "lf"
   },
-  "organizeImports": {
-    "enabled": true
-  },
+  "assist": { "actions": { "source": { "organizeImports": "on" } } },
   "linter": {
     "enabled": true,
     "rules": {
       "recommended": true,
       "style": {
         "noNonNullAssertion": "off",
-        "useImportType": "warn"
+        "useImportType": "warn",
+        "noParameterAssign": "error",
+        "useAsConstAssertion": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "noUnusedTemplateLiteral": "error",
+        "useNumberNamespace": "error",
+        "noInferrableTypes": "error",
+        "noUselessElse": "error"
       },
       "suspicious": {
         "noExplicitAny": "warn"

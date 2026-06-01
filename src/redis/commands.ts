@@ -1,4 +1,9 @@
-import type { RedisStore, SetOptions, ZAddOptions, ZRangeByScoreOptions } from "./mysql-store.ts";
+import type {
+  MysqlRedisStore,
+  SetOptions,
+  ZAddOptions,
+  ZRangeByScoreOptions,
+} from "./mysql-store.ts";
 
 export type RedisResult = { result: unknown } | { error: string };
 
@@ -32,7 +37,7 @@ function toFloat(s: string): number | null {
 }
 
 export async function executeCommand(
-  store: RedisStore,
+  store: MysqlRedisStore,
   args: string[],
   encoding: Encoding = null,
 ): Promise<RedisResult> {
@@ -51,7 +56,7 @@ export async function executeCommand(
 }
 
 async function executeRaw(
-  store: RedisStore,
+  store: MysqlRedisStore,
   cmd: string,
   a: string[],
 ): Promise<{ result: unknown } | { error: string }> {

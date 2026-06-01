@@ -1,4 +1,4 @@
-import type { Db, InsertMessage, ScheduleRow } from "../db.ts";
+import type { Db, InsertMessage } from "../db.ts";
 import { newMessageId } from "../ids.ts";
 import type { Logger } from "../logger.ts";
 import { deliverMessage } from "./deliver.ts";

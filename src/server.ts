@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { Db } from "./db.ts";
 import type { Logger } from "./logger.ts";
-import type { RedisStore } from "./redis/store.ts";
+import type { MysqlRedisStore } from "./redis/mysql-store.ts";
 import { dlqRoute } from "./routes/dlq.ts";
 import { eventsRoute } from "./routes/events.ts";
 import { healthRoute } from "./routes/health.ts";
@@ -15,7 +15,7 @@ import { urlGroupsRoute } from "./routes/url-groups.ts";
 export interface ServerDeps {
   db: Db;
   logger: Logger;
-  redisStore?: RedisStore;
+  redisStore?: MysqlRedisStore;
   redisToken?: string;
 }
 

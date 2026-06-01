@@ -1,7 +1,6 @@
 import mysql from "mysql2/promise";
 import { globToRegex } from "./glob.ts";
-
-export type RedisType = "string" | "list" | "set" | "zset" | "hash";
+import type { RedisType } from "./store.ts";
 
 interface RedisEntry {
   type: RedisType;
@@ -38,7 +37,7 @@ export interface ZRangeByScoreOptions {
   limit?: { offset: number; count: number };
 }
 
-export interface RedisStore {
+export interface MysqlRedisStore {
   set(key: string, value: string, opts?: SetOptions): Promise<string | null>;
   get(key: string): Promise<string | null>;
   mset(pairs: [string, string][]): Promise<void>;
@@ -179,7 +178,7 @@ export interface MySQLConfig {
   database: string;
 }
 
-export async function createRedisStore(config: MySQLConfig): Promise<RedisStore> {
+export async function createRedisStore(config: MySQLConfig): Promise<MysqlRedisStore> {
   const pool = mysql.createPool({
     host: config.host,
     port: config.port,
@@ -409,7 +408,7 @@ export async function createRedisStore(config: MySQLConfig): Promise<RedisStore>
     await setEntry(key, entry);
   }
 
-  const store: RedisStore = {
+  const store: MysqlRedisStore = {
     async set(key, value, opts) {
       const existing = await getEntry(key);
       if (opts?.nx && existing) return null;

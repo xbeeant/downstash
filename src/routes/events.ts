@@ -1,5 +1,5 @@
-import { Hono } from "hono";
 import type { Context } from "hono";
+import { Hono } from "hono";
 import type { Db } from "../db.js";
 
 export interface EventsDeps {

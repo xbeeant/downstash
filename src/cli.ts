@@ -314,7 +314,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     logger.info("shutting down", { signal });
     await worker.stop();
-    server.stop();
+    await server.stop();
     await db.close();
     process.exit(0);
   };
