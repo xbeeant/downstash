@@ -50,18 +50,8 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
     return c.json({ error: "destination is required" }, 400);
   }
   const destination = decodeURIComponent(rawDest);
-  let parsedUrl: URL;
-  try {
-    parsedUrl = new URL(destination);
-  } catch {
-    return c.json({ error: `invalid destination URL: ${destination}` }, 400);
-  }
-  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-    return c.json({ error: `unsupported destination protocol: ${parsedUrl.protocol}` }, 400);
-  }
 
   const body = new Uint8Array(await c.req.arrayBuffer());
-
   const method = (c.req.header("upstash-method") ?? "POST").toUpperCase();
   const retries = parseIntHeader(c.req.header("upstash-retries"), 3, "Upstash-Retries");
   if (retries instanceof Error) return c.json({ error: retries.message }, 400);
@@ -76,6 +66,47 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
   if (notBeforeMs instanceof Error) return c.json({ error: notBeforeMs.message }, 400);
 
   const forwardHeaders = collectForwardHeaders(c.req.raw.headers, forceJson);
+  const callbackUrl = c.req.header("upstash-callback") ?? null;
+  const failureCallbackUrl = c.req.header("upstash-failure-callback") ?? null;
+
+  const urlGroup = await db.getUrlGroup(destination);
+  if (urlGroup) {
+    const results: { messageId: string; url: string }[] = [];
+    for (const endpoint of urlGroup.endpoints) {
+      const id = newMessageId();
+      await db.insertMessage({
+        id,
+        destination: endpoint.url,
+        method,
+        body,
+        forwardHeaders,
+        retries,
+        notBeforeMs,
+        timeoutMs,
+        callbackUrl,
+        failureCallbackUrl,
+      });
+
+      logger.info("publish to url group accepted", {
+        messageId: id,
+        groupName: destination,
+        endpoint: endpoint.url,
+      });
+
+      results.push({ messageId: id, url: endpoint.url });
+    }
+    return c.json(results);
+  }
+
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(destination);
+  } catch {
+    return c.json({ error: `invalid destination URL or url group: ${destination}` }, 400);
+  }
+  if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+    return c.json({ error: `unsupported destination protocol: ${parsedUrl.protocol}` }, 400);
+  }
 
   const id = newMessageId();
   await db.insertMessage({
@@ -87,8 +118,8 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
     retries,
     notBeforeMs,
     timeoutMs,
-    callbackUrl: c.req.header("upstash-callback") ?? null,
-    failureCallbackUrl: c.req.header("upstash-failure-callback") ?? null,
+    callbackUrl,
+    failureCallbackUrl,
   });
 
   logger.info("publish accepted", {

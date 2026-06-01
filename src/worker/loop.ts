@@ -1,4 +1,5 @@
-import type { Db } from "../db.ts";
+import type { Db, InsertMessage, ScheduleRow } from "../db.ts";
+import { newMessageId } from "../ids.ts";
 import type { Logger } from "../logger.ts";
 import { deliverMessage } from "./deliver.ts";
 
@@ -23,8 +24,41 @@ export function createWorker(opts: WorkerOptions): Worker {
   let stopping = false;
   const inFlight = new Set<Promise<void>>();
 
+  async function processSchedules(now: number): Promise<void> {
+    const dueSchedules = await opts.db.claimDueSchedules(now);
+    for (const schedule of dueSchedules) {
+      const msgId = newMessageId();
+      const insertMsg: InsertMessage = {
+        id: msgId,
+        destination: schedule.destination,
+        method: schedule.method,
+        body: schedule.body,
+        forwardHeaders: schedule.forwardHeaders,
+        retries: schedule.retries,
+        notBeforeMs: now,
+        timeoutMs: schedule.timeoutMs,
+        callbackUrl: schedule.callbackUrl,
+        failureCallbackUrl: schedule.failureCallbackUrl,
+      };
+      await opts.db.insertMessage(insertMsg);
+
+      const nextRun = computeNextCronRun(schedule.cron, now);
+      await opts.db.updateScheduleNextRun(schedule.id, now, nextRun);
+
+      opts.logger.info("scheduled message triggered", {
+        scheduleId: schedule.id,
+        messageId: msgId,
+        destination: schedule.destination,
+      });
+    }
+  }
+
   async function tick(): Promise<void> {
-    const due = await opts.db.claimDue(batchSize, Date.now());
+    const now = Date.now();
+
+    await processSchedules(now);
+
+    const due = await opts.db.claimDue(batchSize, now);
     for (const msg of due) {
       const p = deliverMessage(msg, {
         db: opts.db,
@@ -43,6 +77,11 @@ export function createWorker(opts: WorkerOptions): Worker {
         });
       inFlight.add(p);
     }
+  }
+
+  function computeNextCronRun(_cron: string, now: number): number {
+    const msInMinute = 60 * 1000;
+    return now + msInMinute;
   }
 
   function scheduleNext(): void {

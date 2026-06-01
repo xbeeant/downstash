@@ -64,7 +64,7 @@ function parseArgs(argv: string[]): ParsedArgs {
           tokenSubcommand = "revoke";
         } else {
           console.error(`unknown tokens subcommand: ${arg}`);
-          console.error(`use: downstash tokens [add|list|revoke]`);
+          console.error("use: downstash tokens [add|list|revoke]");
           process.exit(2);
         }
         continue;
@@ -242,7 +242,7 @@ async function main(): Promise<void> {
         const result = await db.createToken(args.tokenAppName);
         console.log(`Token created for app: ${result.appName}`);
         console.log(`Token: ${result.token}`);
-        console.log(`\nStore this token securely - it will not be shown again!`);
+        console.log("\nStore this token securely - it will not be shown again!");
       } else if (args.tokenSubcommand === "list") {
         const tokens = await db.listTokens();
         if (tokens.length === 0) {
@@ -255,7 +255,9 @@ async function main(): Promise<void> {
             console.log(`ID: ${t.id}`);
             console.log(`  App Name:    ${t.appName}`);
             console.log(`  Created:     ${new Date(t.createdAt).toISOString()}`);
-            console.log(`  Last Used:   ${t.lastUsedAt ? new Date(t.lastUsedAt).toISOString() : "never"}`);
+            console.log(
+              `  Last Used:   ${t.lastUsedAt ? new Date(t.lastUsedAt).toISOString() : "never"}`,
+            );
             console.log("");
           }
         }

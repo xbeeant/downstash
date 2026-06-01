@@ -65,8 +65,8 @@ export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Pr
   const failureMessage = errorText ?? `non-2xx status ${response?.status ?? "unknown"}`;
   const nextAttempt = message.attempt + 1;
   if (nextAttempt > message.retries) {
-    await db.markFailed(message.id, failureMessage, now);
-    logger.warn("failed (retries exhausted)", {
+    await db.moveToDlq(message.id, failureMessage, now);
+    logger.warn("failed (retries exhausted, moved to dlq)", {
       messageId: message.id,
       destination: message.destination,
       attempts: nextAttempt,

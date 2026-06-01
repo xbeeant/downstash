@@ -1,4 +1,8 @@
 import mysql from "mysql2/promise";
+import { Umzug } from "umzug";
+import { newMessageId } from "./ids.js";
+import * as initialSchema from "./migrations/001-initial-schema.js";
+import * as qstashExtensions from "./migrations/002-qstash-extensions.js";
 
 export type MessageStatus = "pending" | "in_flight" | "delivered" | "failed" | "cancelled";
 
@@ -18,6 +22,7 @@ export interface MessageRow {
   lastError: string | null;
   createdMs: number;
   updatedMs: number;
+  queueName: string | null;
 }
 
 export interface InsertMessage {
@@ -31,6 +36,71 @@ export interface InsertMessage {
   timeoutMs: number;
   callbackUrl: string | null;
   failureCallbackUrl: string | null;
+  queueName?: string | null;
+}
+
+export interface ScheduleRow {
+  id: string;
+  destination: string;
+  cron: string;
+  method: string;
+  body: Uint8Array;
+  forwardHeaders: Record<string, string>;
+  retries: number;
+  timeoutMs: number;
+  callbackUrl: string | null;
+  failureCallbackUrl: string | null;
+  lastRunMs: number | null;
+  nextRunMs: number;
+  createdMs: number;
+  updatedMs: number;
+}
+
+export interface InsertSchedule {
+  id: string;
+  destination: string;
+  cron: string;
+  method: string;
+  body: Uint8Array;
+  forwardHeaders: Record<string, string>;
+  retries: number;
+  timeoutMs: number;
+  callbackUrl: string | null;
+  failureCallbackUrl: string | null;
+  nextRunMs: number;
+}
+
+export interface QueueRow {
+  name: string;
+  parallelism: number;
+  createdMs: number;
+  updatedMs: number;
+}
+
+export interface UrlGroupRow {
+  name: string;
+  endpoints: { url: string }[];
+  createdMs: number;
+  updatedMs: number;
+}
+
+export interface EventRow {
+  id: string;
+  type: string;
+  messageId: string | null;
+  data: Record<string, unknown> | null;
+  createdMs: number;
+}
+
+export interface DlqRow {
+  id: string;
+  messageId: string;
+  destination: string;
+  method: string;
+  body: Uint8Array;
+  forwardHeaders: Record<string, string>;
+  lastError: string;
+  createdMs: number;
 }
 
 export interface MySQLConfig {
@@ -40,40 +110,6 @@ export interface MySQLConfig {
   password: string;
   database: string;
 }
-
-const MESSAGES_SCHEMA = `
-CREATE TABLE IF NOT EXISTS messages (
-  id                     VARCHAR(255) PRIMARY KEY,
-  destination            TEXT NOT NULL,
-  method                 VARCHAR(10) NOT NULL,
-  body                   LONGBLOB NOT NULL,
-  forward_headers_json   LONGTEXT NOT NULL,
-  retries                INT NOT NULL,
-  attempt                INT NOT NULL DEFAULT 0,
-  not_before_ms          BIGINT NOT NULL,
-  timeout_ms             INT NOT NULL,
-  callback_url           TEXT,
-  failure_callback_url   TEXT,
-  status                 VARCHAR(20) NOT NULL,
-  last_error             TEXT,
-  created_ms             BIGINT NOT NULL,
-  updated_ms             BIGINT NOT NULL,
-  INDEX idx_messages_pending (status, not_before_ms)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-`;
-
-const TOKENS_SCHEMA = `
-CREATE TABLE IF NOT EXISTS tokens (
-  id           INT AUTO_INCREMENT PRIMARY KEY,
-  token        VARCHAR(255) NOT NULL UNIQUE,
-  app_name     VARCHAR(255) NOT NULL,
-  created_at   BIGINT NOT NULL,
-  last_used_at BIGINT,
-  INDEX idx_token (token)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-`;
-
-const SCHEMA = MESSAGES_SCHEMA + TOKENS_SCHEMA;
 
 export interface TokenRow {
   id: number;
@@ -94,6 +130,7 @@ export interface TokenStore {
 export interface Db extends TokenStore {
   insertMessage: (msg: InsertMessage) => Promise<void>;
   getMessage: (id: string) => Promise<MessageRow | null>;
+  listMessages: () => Promise<MessageRow[]>;
   cancelMessage: (id: string) => Promise<boolean>;
   claimDue: (limit: number, now: number) => Promise<MessageRow[]>;
   markDelivered: (id: string, now: number) => Promise<void>;
@@ -105,6 +142,27 @@ export interface Db extends TokenStore {
     error: string,
     now: number,
   ) => Promise<void>;
+  moveToDlq: (id: string, error: string, now: number) => Promise<void>;
+  insertSchedule: (schedule: InsertSchedule) => Promise<void>;
+  getSchedule: (id: string) => Promise<ScheduleRow | null>;
+  listSchedules: () => Promise<ScheduleRow[]>;
+  deleteSchedule: (id: string) => Promise<boolean>;
+  claimDueSchedules: (now: number) => Promise<ScheduleRow[]>;
+  updateScheduleNextRun: (id: string, lastRunMs: number, nextRunMs: number) => Promise<void>;
+  insertQueue: (name: string, parallelism?: number) => Promise<void>;
+  getQueue: (name: string) => Promise<QueueRow | null>;
+  listQueues: () => Promise<QueueRow[]>;
+  deleteQueue: (name: string) => Promise<boolean>;
+  upsertUrlGroup: (name: string, endpoints: { url: string }[]) => Promise<void>;
+  getUrlGroup: (name: string) => Promise<UrlGroupRow | null>;
+  listUrlGroups: () => Promise<UrlGroupRow[]>;
+  deleteUrlGroup: (name: string) => Promise<boolean>;
+  insertEvent: (type: string, messageId?: string, data?: Record<string, unknown>) => Promise<void>;
+  listEvents: () => Promise<EventRow[]>;
+  listDlq: () => Promise<DlqRow[]>;
+  getDlq: (id: string) => Promise<DlqRow | null>;
+  deleteDlq: (id: string) => Promise<boolean>;
+  requeueDlq: (id: string) => Promise<string | null>;
   reset: () => Promise<void>;
   close: () => Promise<void>;
 }
@@ -121,10 +179,42 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
     queueLimit: 0,
   });
 
-  const conn = await pool.getConnection();
-  await conn.query(MESSAGES_SCHEMA);
-  await conn.query(TOKENS_SCHEMA);
-  conn.release();
+  const umzug = new Umzug({
+    migrations: [
+      { name: "001-initial-schema", up: initialSchema.up, down: initialSchema.down },
+      { name: "002-qstash-extensions", up: qstashExtensions.up, down: qstashExtensions.down },
+    ],
+    context: pool,
+    storage: {
+      async logMigration({ name }) {
+        await pool.execute(
+          "INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)",
+          [name, Date.now()],
+        );
+      },
+      async unlogMigration({ name }) {
+        await pool.execute("DELETE FROM schema_migrations WHERE name = ?", [name]);
+      },
+      async executed() {
+        try {
+          await pool.execute(`
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+              name VARCHAR(255) PRIMARY KEY,
+              applied_at BIGINT NOT NULL
+            )
+          `);
+          const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+            "SELECT name FROM schema_migrations ORDER BY applied_at",
+          );
+          return rows.map((r) => r.name as string);
+        } catch {
+          return [];
+        }
+      },
+    },
+  });
+
+  await umzug.up();
 
   async function insertMessage(msg: InsertMessage): Promise<void> {
     const now = Date.now();
@@ -133,8 +223,8 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
         id, destination, method, body, forward_headers_json,
         retries, attempt, not_before_ms, timeout_ms,
         callback_url, failure_callback_url, status,
-        created_ms, updated_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        created_ms, updated_ms, queue_name
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         msg.id,
         msg.destination,
@@ -150,6 +240,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
         "pending",
         now,
         now,
+        msg.queueName || null,
       ],
     );
   }
@@ -236,10 +327,283 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
 
   async function reset(): Promise<void> {
     await pool.execute("DELETE FROM messages");
+    await pool.execute("DELETE FROM schedules");
+    await pool.execute("DELETE FROM queues");
+    await pool.execute("DELETE FROM url_groups");
+    await pool.execute("DELETE FROM events");
+    await pool.execute("DELETE FROM dlq");
   }
 
   async function close(): Promise<void> {
     await pool.end();
+  }
+
+  async function listMessages(): Promise<MessageRow[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM messages ORDER BY created_ms DESC",
+    );
+    return rows.map(rowToMessage);
+  }
+
+  async function moveToDlq(id: string, error: string, now: number): Promise<void> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM messages WHERE id = ?",
+      [id],
+    );
+    if (rows.length === 0) return;
+
+    const msg = rowToMessage(rows[0]!);
+    const dlqId = newMessageId();
+    await pool.execute(
+      `INSERT INTO dlq (
+        id, message_id, destination, method, body,
+        forward_headers_json, last_error, created_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        dlqId,
+        msg.id,
+        msg.destination,
+        msg.method,
+        msg.body,
+        JSON.stringify(msg.forwardHeaders),
+        error,
+        now,
+      ],
+    );
+    await pool.execute("DELETE FROM messages WHERE id = ?", [id]);
+    await insertEvent("dlq.message_added", msg.id, { error });
+  }
+
+  async function insertSchedule(schedule: InsertSchedule): Promise<void> {
+    const now = Date.now();
+    await pool.execute(
+      `INSERT INTO schedules (
+        id, destination, cron, method, body,
+        forward_headers_json, retries, timeout_ms,
+        callback_url, failure_callback_url,
+        last_run_ms, next_run_ms, created_ms, updated_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        schedule.id,
+        schedule.destination,
+        schedule.cron,
+        schedule.method,
+        schedule.body,
+        JSON.stringify(schedule.forwardHeaders),
+        schedule.retries,
+        schedule.timeoutMs,
+        schedule.callbackUrl,
+        schedule.failureCallbackUrl,
+        null,
+        schedule.nextRunMs,
+        now,
+        now,
+      ],
+    );
+  }
+
+  async function getSchedule(id: string): Promise<ScheduleRow | null> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM schedules WHERE id = ?",
+      [id],
+    );
+    if (rows.length === 0) return null;
+    return rowToSchedule(rows[0]!);
+  }
+
+  async function listSchedules(): Promise<ScheduleRow[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM schedules ORDER BY created_ms DESC",
+    );
+    return rows.map(rowToSchedule);
+  }
+
+  async function deleteSchedule(id: string): Promise<boolean> {
+    const [result] = await pool.execute<mysql.ResultSetHeader>(
+      "DELETE FROM schedules WHERE id = ?",
+      [id],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async function claimDueSchedules(now: number): Promise<ScheduleRow[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM schedules WHERE next_run_ms <= ?",
+      [now],
+    );
+    return rows.map(rowToSchedule);
+  }
+
+  async function updateScheduleNextRun(
+    id: string,
+    lastRunMs: number,
+    nextRunMs: number,
+  ): Promise<void> {
+    const now = Date.now();
+    await pool.execute(
+      "UPDATE schedules SET last_run_ms = ?, next_run_ms = ?, updated_ms = ? WHERE id = ?",
+      [lastRunMs, nextRunMs, now, id],
+    );
+  }
+
+  async function insertQueue(name: string, parallelism = 1): Promise<void> {
+    const now = Date.now();
+    await pool.execute(
+      `INSERT INTO queues (name, parallelism, created_ms, updated_ms)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE parallelism = VALUES(parallelism), updated_ms = VALUES(updated_ms)`,
+      [name, parallelism, now, now],
+    );
+  }
+
+  async function getQueue(name: string): Promise<QueueRow | null> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM queues WHERE name = ?",
+      [name],
+    );
+    if (rows.length === 0) return null;
+    return {
+      name: rows[0].name,
+      parallelism: rows[0].parallelism,
+      createdMs: rows[0].created_ms,
+      updatedMs: rows[0].updated_ms,
+    };
+  }
+
+  async function listQueues(): Promise<QueueRow[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM queues ORDER BY created_ms DESC",
+    );
+    return rows.map((row) => ({
+      name: row.name,
+      parallelism: row.parallelism,
+      createdMs: row.created_ms,
+      updatedMs: row.updated_ms,
+    }));
+  }
+
+  async function deleteQueue(name: string): Promise<boolean> {
+    const [result] = await pool.execute<mysql.ResultSetHeader>(
+      "DELETE FROM queues WHERE name = ?",
+      [name],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async function upsertUrlGroup(name: string, endpoints: { url: string }[]): Promise<void> {
+    const now = Date.now();
+    await pool.execute(
+      `INSERT INTO url_groups (name, endpoints_json, created_ms, updated_ms)
+       VALUES (?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE endpoints_json = VALUES(endpoints_json), updated_ms = VALUES(updated_ms)`,
+      [name, JSON.stringify(endpoints), now, now],
+    );
+  }
+
+  async function getUrlGroup(name: string): Promise<UrlGroupRow | null> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM url_groups WHERE name = ?",
+      [name],
+    );
+    if (rows.length === 0) return null;
+    return {
+      name: rows[0].name,
+      endpoints: JSON.parse(rows[0].endpoints_json) as { url: string }[],
+      createdMs: rows[0].created_ms,
+      updatedMs: rows[0].updated_ms,
+    };
+  }
+
+  async function listUrlGroups(): Promise<UrlGroupRow[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM url_groups ORDER BY created_ms DESC",
+    );
+    return rows.map((row) => ({
+      name: row.name,
+      endpoints: JSON.parse(row.endpoints_json) as { url: string }[],
+      createdMs: row.created_ms,
+      updatedMs: row.updated_ms,
+    }));
+  }
+
+  async function deleteUrlGroup(name: string): Promise<boolean> {
+    const [result] = await pool.execute<mysql.ResultSetHeader>(
+      "DELETE FROM url_groups WHERE name = ?",
+      [name],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async function insertEvent(
+    type: string,
+    messageId?: string,
+    data?: Record<string, unknown>,
+  ): Promise<void> {
+    const id = newMessageId();
+    const now = Date.now();
+    await pool.execute(
+      "INSERT INTO events (id, type, message_id, data_json, created_ms) VALUES (?, ?, ?, ?, ?)",
+      [id, type, messageId || null, data ? JSON.stringify(data) : null, now],
+    );
+  }
+
+  async function listEvents(): Promise<EventRow[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM events ORDER BY created_ms DESC LIMIT 1000",
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      type: row.type,
+      messageId: row.message_id,
+      data: row.data_json ? (JSON.parse(row.data_json) as Record<string, unknown>) : null,
+      createdMs: row.created_ms,
+    }));
+  }
+
+  async function listDlq(): Promise<DlqRow[]> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM dlq ORDER BY created_ms DESC",
+    );
+    return rows.map(rowToDlq);
+  }
+
+  async function getDlq(id: string): Promise<DlqRow | null> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>("SELECT * FROM dlq WHERE id = ?", [
+      id,
+    ]);
+    if (rows.length === 0) return null;
+    return rowToDlq(rows[0]!);
+  }
+
+  async function deleteDlq(id: string): Promise<boolean> {
+    const [result] = await pool.execute<mysql.ResultSetHeader>("DELETE FROM dlq WHERE id = ?", [
+      id,
+    ]);
+    return result.affectedRows > 0;
+  }
+
+  async function requeueDlq(id: string): Promise<string | null> {
+    const dlqItem = await getDlq(id);
+    if (!dlqItem) return null;
+
+    const newMsgId = newMessageId();
+    await insertMessage({
+      id: newMsgId,
+      destination: dlqItem.destination,
+      method: dlqItem.method,
+      body: dlqItem.body,
+      forwardHeaders: dlqItem.forwardHeaders,
+      retries: 3,
+      notBeforeMs: Date.now(),
+      timeoutMs: 30_000,
+      callbackUrl: null,
+      failureCallbackUrl: null,
+    });
+
+    await deleteDlq(id);
+    await insertEvent("dlq.message_requeued", dlqItem.messageId, { newMessageId: newMsgId });
+
+    return newMsgId;
   }
 
   function rowToMessage(row: mysql.RowDataPacket): MessageRow {
@@ -255,10 +619,43 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
       timeoutMs: row.timeout_ms,
       callbackUrl: row.callback_url,
       failureCallbackUrl: row.failure_callback_url,
-      status: row.status,
+      status: row.status as MessageStatus,
       lastError: row.last_error,
       createdMs: row.created_ms,
       updatedMs: row.updated_ms,
+      queueName: row.queue_name || null,
+    };
+  }
+
+  function rowToSchedule(row: mysql.RowDataPacket): ScheduleRow {
+    return {
+      id: row.id,
+      destination: row.destination,
+      cron: row.cron,
+      method: row.method,
+      body: toUint8(row.body),
+      forwardHeaders: JSON.parse(row.forward_headers_json) as Record<string, string>,
+      retries: row.retries,
+      timeoutMs: row.timeout_ms,
+      callbackUrl: row.callback_url,
+      failureCallbackUrl: row.failure_callback_url,
+      lastRunMs: row.last_run_ms,
+      nextRunMs: row.next_run_ms,
+      createdMs: row.created_ms,
+      updatedMs: row.updated_ms,
+    };
+  }
+
+  function rowToDlq(row: mysql.RowDataPacket): DlqRow {
+    return {
+      id: row.id,
+      messageId: row.message_id,
+      destination: row.destination,
+      method: row.method,
+      body: toUint8(row.body),
+      forwardHeaders: JSON.parse(row.forward_headers_json) as Record<string, string>,
+      lastError: row.last_error,
+      createdMs: row.created_ms,
     };
   }
 
@@ -284,10 +681,11 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
   async function createToken(appName: string): Promise<{ token: string; appName: string }> {
     const token = generateToken();
     const now = Date.now();
-    await pool.execute(
-      "INSERT INTO tokens (token, app_name, created_at) VALUES (?, ?, ?)",
-      [token, appName, now],
-    );
+    await pool.execute("INSERT INTO tokens (token, app_name, created_at) VALUES (?, ?, ?)", [
+      token,
+      appName,
+      now,
+    ]);
     return { token, appName };
   }
 
@@ -322,20 +720,39 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
 
   async function updateLastUsed(token: string): Promise<void> {
     const now = Date.now();
-    await pool.execute(
-      "UPDATE tokens SET last_used_at = ? WHERE token = ?",
-      [now, token],
-    );
+    await pool.execute("UPDATE tokens SET last_used_at = ? WHERE token = ?", [now, token]);
   }
 
   return {
     insertMessage,
     getMessage,
+    listMessages,
     cancelMessage,
     claimDue,
     markDelivered,
     markFailed,
     rescheduleRetry,
+    moveToDlq,
+    insertSchedule,
+    getSchedule,
+    listSchedules,
+    deleteSchedule,
+    claimDueSchedules,
+    updateScheduleNextRun,
+    insertQueue,
+    getQueue,
+    listQueues,
+    deleteQueue,
+    upsertUrlGroup,
+    getUrlGroup,
+    listUrlGroups,
+    deleteUrlGroup,
+    insertEvent,
+    listEvents,
+    listDlq,
+    getDlq,
+    deleteDlq,
+    requeueDlq,
     reset,
     close,
     createToken,

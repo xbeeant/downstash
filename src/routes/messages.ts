@@ -23,6 +23,14 @@ async function verifyAuth(c: Context, db: Db): Promise<Response | null> {
 export function messagesRoute({ db }: MessagesDeps): Hono {
   const app = new Hono();
 
+  app.get("/v2/messages", async (c) => {
+    const authErr = await verifyAuth(c, db);
+    if (authErr) return authErr;
+
+    const messages = await db.listMessages();
+    return c.json(messages.map(toApiShape));
+  });
+
   app.get("/v2/messages/:messageId", async (c) => {
     const authErr = await verifyAuth(c, db);
     if (authErr) return authErr;
@@ -58,5 +66,6 @@ function toApiShape(row: MessageRow) {
     lastError: row.lastError,
     createdAt: row.createdMs,
     updatedAt: row.updatedMs,
+    queueName: row.queueName,
   };
 }

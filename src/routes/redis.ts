@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
+import type { Logger } from "../logger.ts";
 import { executeCommand } from "../redis/commands.ts";
 import type { RedisStore } from "../redis/mysql-store.ts";
-import type { Logger } from "../logger.ts";
 
 export interface RedisDeps {
   store: RedisStore;
