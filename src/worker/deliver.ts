@@ -1,4 +1,4 @@
-import type { Db, MessageRow } from "../db.ts";
+import type { Db, MessageRow, TokenRow } from "../db.ts";
 import { newMessageId } from "../ids.ts";
 import type { Logger } from "../logger.ts";
 import { signRequest } from "../signing.ts";
@@ -7,19 +7,45 @@ import { backoffMs } from "./backoff.ts";
 export interface DeliverDeps {
   db: Db;
   logger: Logger;
-  currentSigningKey: string;
+  defaultSigningKey: string;
   fetchImpl?: typeof fetch;
+}
+
+const signingKeyCache = new Map<number, TokenRow>();
+
+async function getSigningKey(
+  db: Db,
+  tokenId: number | null,
+  defaultSigningKey: string,
+): Promise<string> {
+  if (tokenId === null) {
+    return defaultSigningKey;
+  }
+
+  const cached = signingKeyCache.get(tokenId);
+  if (cached) {
+    return cached.currentSigningKey;
+  }
+
+  const tokenRow = await db.verifyTokenByUserId(tokenId);
+  if (tokenRow) {
+    signingKeyCache.set(tokenId, tokenRow);
+    return tokenRow.currentSigningKey;
+  }
+
+  return defaultSigningKey;
 }
 
 export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Promise<void> {
   const { db, logger } = deps;
   const fetchImpl = deps.fetchImpl ?? fetch;
 
+  const signingKey = await getSigningKey(db, message.tokenId, deps.defaultSigningKey);
   const jwt = await signRequest({
     destination: message.destination,
     messageId: message.id,
     body: message.body,
-    signingKey: deps.currentSigningKey,
+    signingKey,
   });
 
   const headers = new Headers();

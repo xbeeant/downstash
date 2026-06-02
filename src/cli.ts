@@ -292,7 +292,7 @@ async function main(): Promise<void> {
   const worker = createWorker({
     db,
     logger,
-    currentSigningKey: config.currentSigningKey,
+    defaultSigningKey: config.currentSigningKey,
     tickMs: config.tickMs,
   });
 

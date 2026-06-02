@@ -2,11 +2,12 @@ import type { Db, InsertMessage } from "../db.ts";
 import { newMessageId } from "../ids.ts";
 import type { Logger } from "../logger.ts";
 import { deliverMessage } from "./deliver.ts";
+import { parseCronExpression } from "../cron.ts";
 
 export interface WorkerOptions {
   db: Db;
   logger: Logger;
-  currentSigningKey: string;
+  defaultSigningKey: string;
   tickMs: number;
   batchSize?: number;
   fetchImpl?: typeof fetch;
@@ -63,7 +64,7 @@ export function createWorker(opts: WorkerOptions): Worker {
       const p = deliverMessage(msg, {
         db: opts.db,
         logger: opts.logger,
-        currentSigningKey: opts.currentSigningKey,
+        defaultSigningKey: opts.defaultSigningKey,
         fetchImpl: opts.fetchImpl,
       })
         .catch((err) =>
@@ -79,9 +80,16 @@ export function createWorker(opts: WorkerOptions): Worker {
     }
   }
 
-  function computeNextCronRun(_cron: string, now: number): number {
-    const msInMinute = 60 * 1000;
-    return now + msInMinute;
+  function computeNextCronRun(cron: string, now: number): number {
+    try {
+      return parseCronExpression(cron);
+    } catch (error) {
+      opts.logger.error("failed to parse cron expression", {
+        cron,
+        error: String(error),
+      });
+      return now + 60 * 1000;
+    }
   }
 
   function scheduleNext(): void {

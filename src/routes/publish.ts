@@ -4,6 +4,7 @@ import type { Db } from "../db.ts";
 import { parseDurationMs } from "../duration.ts";
 import { newMessageId } from "../ids.ts";
 import type { Logger } from "../logger.ts";
+import { parseCronExpression } from "../cron.ts";
 
 export interface PublishDeps {
   db: Db;
@@ -68,6 +69,40 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
   const forwardHeaders = collectForwardHeaders(c.req.raw.headers, forceJson);
   const callbackUrl = c.req.header("upstash-callback") ?? null;
   const failureCallbackUrl = c.req.header("upstash-failure-callback") ?? null;
+  const cron = c.req.header("upstash-cron");
+
+  if (cron) {
+    let nextRunMs: number;
+    try {
+      nextRunMs = parseCronExpression(cron);
+    } catch {
+      return c.json({ error: `invalid Upstash-Cron: ${cron}` }, 400);
+    }
+
+    const id = newMessageId();
+    await db.insertSchedule({
+      id,
+      destination,
+      cron,
+      method,
+      body,
+      forwardHeaders,
+      retries,
+      timeoutMs,
+      callbackUrl,
+      failureCallbackUrl,
+      nextRunMs,
+      tokenId: tokenRow.id,
+    });
+
+    logger.info("publish with cron accepted", {
+      scheduleId: id,
+      destination,
+      cron,
+    });
+
+    return c.json({ scheduleId: id, url: destination, cron });
+  }
 
   const urlGroup = await db.getUrlGroup(destination);
   if (urlGroup) {
@@ -85,6 +120,7 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
         timeoutMs,
         callbackUrl,
         failureCallbackUrl,
+        tokenId: tokenRow.id,
       });
 
       logger.info("publish to url group accepted", {
@@ -120,6 +156,7 @@ async function handlePublish(c: Context, args: HandleArgs): Promise<Response> {
     timeoutMs,
     callbackUrl,
     failureCallbackUrl,
+    tokenId: tokenRow.id,
   });
 
   logger.info("publish accepted", {
@@ -266,20 +303,21 @@ async function handleBatch(c: Context, { db, logger }: PublishDeps): Promise<Res
     const forwardHeaders = collectForwardHeadersFromObject(itemHeaders);
 
     const id = newMessageId();
-    await db.insertMessage({
-      id,
-      destination: rawDest,
-      method,
-      body,
-      forwardHeaders,
-      retries,
-      notBeforeMs,
-      timeoutMs,
-      callbackUrl: getHeader("upstash-callback") ?? null,
-      failureCallbackUrl: getHeader("upstash-failure-callback") ?? null,
-    });
+      await db.insertMessage({
+        id,
+        destination: rawDest,
+        method,
+        body,
+        forwardHeaders,
+        retries,
+        notBeforeMs,
+        timeoutMs,
+        callbackUrl: getHeader("upstash-callback") ?? null,
+        failureCallbackUrl: getHeader("upstash-failure-callback") ?? null,
+        tokenId: tokenRow.id,
+      });
 
-    logger.info("batch item accepted", {
+      logger.info("batch item accepted", {
       messageId: id,
       destination: rawDest,
       method,

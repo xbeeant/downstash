@@ -4,6 +4,7 @@ import type { Db, ScheduleRow } from "../db.js";
 import { parseDurationMs } from "../duration.js";
 import { newMessageId } from "../ids.js";
 import type { Logger } from "../logger.js";
+import { parseCronExpression } from "../cron.js";
 
 export interface SchedulesDeps {
   db: Db;
@@ -41,10 +42,8 @@ function scheduleToApi(s: ScheduleRow) {
   };
 }
 
-function parseCron(_cron: string): number {
-  const now = Date.now();
-  const ms = 60000;
-  return now + ms;
+function parseCron(cron: string): number {
+  return parseCronExpression(cron);
 }
 
 export function schedulesRoute({ db, logger }: SchedulesDeps): Hono {

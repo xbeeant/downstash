@@ -3,6 +3,7 @@ import { Umzug } from "umzug";
 import { newMessageId } from "./ids.js";
 import * as initialSchema from "./migrations/001-initial-schema.js";
 import * as qstashExtensions from "./migrations/002-qstash-extensions.js";
+import * as tokenSigningKeys from "./migrations/003-token-signing-keys.js";
 
 export type MessageStatus = "pending" | "in_flight" | "delivered" | "failed" | "cancelled";
 
@@ -23,6 +24,7 @@ export interface MessageRow {
   createdMs: number;
   updatedMs: number;
   queueName: string | null;
+  tokenId: number | null;
 }
 
 export interface InsertMessage {
@@ -37,6 +39,7 @@ export interface InsertMessage {
   callbackUrl: string | null;
   failureCallbackUrl: string | null;
   queueName?: string | null;
+  tokenId?: number | null;
 }
 
 export interface ScheduleRow {
@@ -54,6 +57,7 @@ export interface ScheduleRow {
   nextRunMs: number;
   createdMs: number;
   updatedMs: number;
+  tokenId: number | null;
 }
 
 export interface InsertSchedule {
@@ -68,6 +72,7 @@ export interface InsertSchedule {
   callbackUrl: string | null;
   failureCallbackUrl: string | null;
   nextRunMs: number;
+  tokenId?: number | null;
 }
 
 export interface QueueRow {
@@ -117,14 +122,18 @@ export interface TokenRow {
   appName: string;
   createdAt: number;
   lastUsedAt: number | null;
+  currentSigningKey: string;
+  nextSigningKey: string;
 }
 
 export interface TokenStore {
   createToken: (appName: string) => Promise<{ token: string; appName: string }>;
   verifyToken: (token: string) => Promise<TokenRow | null>;
+  verifyTokenByUserId: (userId: number) => Promise<TokenRow | null>;
   listTokens: () => Promise<Omit<TokenRow, "token">[]>;
   revokeToken: (token: string) => Promise<boolean>;
   updateLastUsed: (token: string) => Promise<void>;
+  updateSigningKeys: (tokenId: number, currentSigningKey: string, nextSigningKey: string) => Promise<void>;
 }
 
 export interface Db extends TokenStore {
@@ -184,6 +193,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
     migrations: [
       { name: "001-initial-schema", up: initialSchema.up, down: initialSchema.down },
       { name: "002-qstash-extensions", up: qstashExtensions.up, down: qstashExtensions.down },
+      { name: "003-token-signing-keys", up: tokenSigningKeys.up, down: tokenSigningKeys.down },
     ],
     context: pool,
     storage: {
@@ -224,8 +234,8 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
         id, destination, method, body, forward_headers_json,
         retries, attempt, not_before_ms, timeout_ms,
         callback_url, failure_callback_url, status,
-        created_ms, updated_ms, queue_name
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        created_ms, updated_ms, queue_name, token_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         msg.id,
         msg.destination,
@@ -242,6 +252,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
         now,
         now,
         msg.queueName || null,
+        msg.tokenId ?? null,
       ],
     );
   }
@@ -382,8 +393,8 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
         id, destination, cron, method, body,
         forward_headers_json, retries, timeout_ms,
         callback_url, failure_callback_url,
-        last_run_ms, next_run_ms, created_ms, updated_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        last_run_ms, next_run_ms, created_ms, updated_ms, token_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         schedule.id,
         schedule.destination,
@@ -399,6 +410,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
         schedule.nextRunMs,
         now,
         now,
+        schedule.tokenId ?? null,
       ],
     );
   }
@@ -625,6 +637,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
       createdMs: row.created_ms,
       updatedMs: row.updated_ms,
       queueName: row.queue_name || null,
+      tokenId: row.token_id || null,
     };
   }
 
@@ -644,6 +657,7 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
       nextRunMs: row.next_run_ms,
       createdMs: row.created_ms,
       updatedMs: row.updated_ms,
+      tokenId: row.token_id || null,
     };
   }
 
@@ -676,18 +690,41 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
       appName: row.app_name,
       createdAt: row.created_at,
       lastUsedAt: row.last_used_at,
+      currentSigningKey: row.current_signing_key,
+      nextSigningKey: row.next_signing_key,
     };
+  }
+
+  function generateSigningKey(): string {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let result = "sig_";
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
   }
 
   async function createToken(appName: string): Promise<{ token: string; appName: string }> {
     const token = generateToken();
+    const currentSigningKey = generateSigningKey();
+    const nextSigningKey = generateSigningKey();
     const now = Date.now();
-    await pool.execute("INSERT INTO tokens (token, app_name, created_at) VALUES (?, ?, ?)", [
-      token,
-      appName,
-      now,
-    ]);
+    await pool.execute(
+      "INSERT INTO tokens (token, app_name, created_at, current_signing_key, next_signing_key) VALUES (?, ?, ?, ?, ?)",
+      [token, appName, now, currentSigningKey, nextSigningKey],
+    );
     return { token, appName };
+  }
+
+  async function updateSigningKeys(
+    tokenId: number,
+    currentSigningKey: string,
+    nextSigningKey: string,
+  ): Promise<void> {
+    await pool.execute(
+      "UPDATE tokens SET current_signing_key = ?, next_signing_key = ? WHERE id = ?",
+      [currentSigningKey, nextSigningKey, tokenId],
+    );
   }
 
   async function verifyToken(token: string): Promise<TokenRow | null> {
@@ -699,15 +736,26 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
     return rowToToken(rows[0]!);
   }
 
+  async function verifyTokenByUserId(userId: number): Promise<TokenRow | null> {
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
+      "SELECT * FROM tokens WHERE id = ?",
+      [userId],
+    );
+    if (rows.length === 0) return null;
+    return rowToToken(rows[0]!);
+  }
+
   async function listTokens(): Promise<Omit<TokenRow, "token">[]> {
     const [rows] = await pool.execute<mysql.RowDataPacket[]>(
-      "SELECT id, app_name, created_at, last_used_at FROM tokens ORDER BY created_at DESC",
+      "SELECT id, app_name, created_at, last_used_at, current_signing_key, next_signing_key FROM tokens ORDER BY created_at DESC",
     );
     return rows.map((r) => ({
       id: r.id,
       appName: r.app_name,
       createdAt: r.created_at,
       lastUsedAt: r.last_used_at,
+      currentSigningKey: r.current_signing_key,
+      nextSigningKey: r.next_signing_key,
     }));
   }
 
@@ -758,9 +806,11 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
     close,
     createToken,
     verifyToken,
+    verifyTokenByUserId,
     listTokens,
     revokeToken,
     updateLastUsed,
+    updateSigningKeys,
   };
 }
 

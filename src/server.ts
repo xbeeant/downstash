@@ -21,6 +21,27 @@ export interface ServerDeps {
 
 export function createServer({ db, logger, redisStore, redisToken }: ServerDeps): Hono {
   const app = new Hono();
+
+  app.use("*", async (c, next) => {
+    const start = Date.now();
+    const method = c.req.method;
+    const path = c.req.path;
+    const requestId = crypto.randomUUID();
+
+    await next();
+
+    const duration = Date.now() - start;
+    const status = c.res.status;
+
+    logger.info("request completed", {
+      requestId,
+      method,
+      path,
+      status,
+      durationMs: duration,
+    });
+  });
+
   app.onError((err, c) => {
     logger.error("unhandled server error", { error: String(err) });
     return c.json({ error: "internal_error" }, 500);
