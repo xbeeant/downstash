@@ -66,6 +66,19 @@ export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Pr
     init.body = message.body;
   }
 
+  logger.info("sending request", {
+    messageId: message.id,
+    destination: message.destination,
+    method: message.method,
+    headers: Object.fromEntries(headers.entries()),
+    bodyLength: message.body.length,
+    bodyPreview: message.body.length > 200 
+      ? new TextDecoder().decode(message.body.slice(0, 200)) + "..." 
+      : new TextDecoder().decode(message.body),
+    attempt: message.attempt,
+    timeoutMs: message.timeoutMs,
+  });
+
   let response: Response | null = null;
   let errorText: string | null = null;
   try {
@@ -171,7 +184,7 @@ async function enqueueDerivedMessage(
     callbackUrl: null,
     failureCallbackUrl: null,
   });
-  deps.logger.debug("enqueued derived message", { kind, url, id });
+  deps.logger.info("enqueued derived message", { kind, url, id });
 }
 
 function isBodyless(method: string): boolean {

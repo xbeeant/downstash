@@ -282,7 +282,14 @@ async function handleBatch(c: Context, { db, logger }: PublishDeps): Promise<Res
       return undefined;
     };
 
-    const body = rawBody != null ? new TextEncoder().encode(String(rawBody)) : new Uint8Array(0);
+    let body: Uint8Array;
+    if (rawBody === undefined || rawBody === null) {
+      body = new Uint8Array(0);
+    } else if (typeof rawBody === "string") {
+      body = new TextEncoder().encode(rawBody);
+    } else {
+      body = new TextEncoder().encode(JSON.stringify(rawBody));
+    }
 
     const method = (getHeader("upstash-method") ?? "POST").toUpperCase();
 
