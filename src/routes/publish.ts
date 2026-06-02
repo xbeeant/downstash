@@ -303,21 +303,21 @@ async function handleBatch(c: Context, { db, logger }: PublishDeps): Promise<Res
     const forwardHeaders = collectForwardHeadersFromObject(itemHeaders);
 
     const id = newMessageId();
-      await db.insertMessage({
-        id,
-        destination: rawDest,
-        method,
-        body,
-        forwardHeaders,
-        retries,
-        notBeforeMs,
-        timeoutMs,
-        callbackUrl: getHeader("upstash-callback") ?? null,
-        failureCallbackUrl: getHeader("upstash-failure-callback") ?? null,
-        tokenId: tokenRow.id,
-      });
+    await db.insertMessage({
+      id,
+      destination: rawDest,
+      method,
+      body,
+      forwardHeaders,
+      retries,
+      notBeforeMs,
+      timeoutMs,
+      callbackUrl: getHeader("upstash-callback") ?? null,
+      failureCallbackUrl: getHeader("upstash-failure-callback") ?? null,
+      tokenId: tokenRow.id,
+    });
 
-      logger.info("batch item accepted", {
+    logger.info("batch item accepted", {
       messageId: id,
       destination: rawDest,
       method,

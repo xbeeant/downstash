@@ -45,7 +45,8 @@ export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Pr
     destination: message.destination,
     messageId: message.id,
     body: message.body,
-    signingKey,
+    currentSigningKey: signingKey,
+    logger,
   });
 
   const headers = new Headers();

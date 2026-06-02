@@ -10,7 +10,7 @@ export interface QueuesDeps {
   logger: Logger;
 }
 
-async function verifyAuth(c: Context, db: Db): Promise<Response | null> {
+async function verifyAuth(c: Context, db: Db): Promise<Response | { id: number }> {
   const auth = c.req.header("authorization") ?? "";
   if (!/^Bearer\s+\S+/i.test(auth)) {
     return c.json({ error: "missing or empty Authorization bearer token" }, 401);
@@ -21,15 +21,15 @@ async function verifyAuth(c: Context, db: Db): Promise<Response | null> {
     return c.json({ error: "invalid token" }, 401);
   }
   await db.updateLastUsed(token);
-  return null;
+  return { id: tokenRow.id };
 }
 
 export function queuesRoute({ db, logger }: QueuesDeps): Hono {
   const app = new Hono();
 
   app.post("/v2/queues", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
 
     const body = await c.req.json();
     if (!body || typeof body !== "object" || !("name" in body)) {
@@ -46,16 +46,16 @@ export function queuesRoute({ db, logger }: QueuesDeps): Hono {
   });
 
   app.get("/v2/queues", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
 
     const queues = await db.listQueues();
     return c.json(queues.map((q) => ({ name: q.name, parallelism: q.parallelism })));
   });
 
   app.get("/v2/queues/:name", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
 
     const name = c.req.param("name");
     const queue = await db.getQueue(name);
@@ -65,8 +65,8 @@ export function queuesRoute({ db, logger }: QueuesDeps): Hono {
   });
 
   app.delete("/v2/queues/:name", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
 
     const name = c.req.param("name");
     const deleted = await db.deleteQueue(name);
@@ -76,8 +76,9 @@ export function queuesRoute({ db, logger }: QueuesDeps): Hono {
   });
 
   app.post("/v2/enqueue/:queueName/:destination{.+}", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
+    const tokenId = authResult.id;
 
     const queueName = c.req.param("queueName");
     const rawDest = c.req.param("destination");
@@ -123,6 +124,7 @@ export function queuesRoute({ db, logger }: QueuesDeps): Hono {
       callbackUrl: c.req.header("upstash-callback") ?? null,
       failureCallbackUrl: c.req.header("upstash-failure-callback") ?? null,
       queueName,
+      tokenId,
     });
 
     logger.info("message enqueued", {

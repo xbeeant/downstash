@@ -11,7 +11,7 @@ export interface SchedulesDeps {
   logger: Logger;
 }
 
-async function verifyAuth(c: Context, db: Db): Promise<Response | null> {
+async function verifyAuth(c: Context, db: Db): Promise<Response | { id: number }> {
   const auth = c.req.header("authorization") ?? "";
   if (!/^Bearer\s+\S+/i.test(auth)) {
     return c.json({ error: "missing or empty Authorization bearer token" }, 401);
@@ -22,7 +22,7 @@ async function verifyAuth(c: Context, db: Db): Promise<Response | null> {
     return c.json({ error: "invalid token" }, 401);
   }
   await db.updateLastUsed(token);
-  return null;
+  return { id: tokenRow.id };
 }
 
 function scheduleToApi(s: ScheduleRow) {
@@ -50,8 +50,9 @@ export function schedulesRoute({ db, logger }: SchedulesDeps): Hono {
   const app = new Hono();
 
   app.post("/v2/schedules/:destination{.+}", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
+    const tokenId = authResult.id;
 
     const rawDest = c.req.param("destination");
     if (!rawDest) {
@@ -102,6 +103,7 @@ export function schedulesRoute({ db, logger }: SchedulesDeps): Hono {
       callbackUrl: c.req.header("upstash-callback") ?? null,
       failureCallbackUrl: c.req.header("upstash-failure-callback") ?? null,
       nextRunMs,
+      tokenId,
     });
 
     logger.info("schedule created", {
@@ -114,16 +116,16 @@ export function schedulesRoute({ db, logger }: SchedulesDeps): Hono {
   });
 
   app.get("/v2/schedules", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
 
     const schedules = await db.listSchedules();
     return c.json(schedules.map(scheduleToApi));
   });
 
   app.get("/v2/schedules/:id", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
 
     const id = c.req.param("id");
     const schedule = await db.getSchedule(id);
@@ -132,8 +134,8 @@ export function schedulesRoute({ db, logger }: SchedulesDeps): Hono {
   });
 
   app.delete("/v2/schedules/:id", async (c) => {
-    const authErr = await verifyAuth(c, db);
-    if (authErr) return authErr;
+    const authResult = await verifyAuth(c, db);
+    if (authResult instanceof Response) return authResult;
 
     const id = c.req.param("id");
     const deleted = await db.deleteSchedule(id);
