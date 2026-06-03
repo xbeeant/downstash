@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.1.3](https://github.com/xbeeant/downstash/compare/v0.1.2...v0.1.3) (2026-06-03)
+
+
+### Features
+
+* 实现令牌签名密钥管理与定时任务功能 ([78cc309](https://github.com/xbeeant/downstash/commit/78cc309c840efce490c3ece25eb8dacf17f65f5b))
+
+
+### Documentation
+
+* **readme:** 重写并本地化README文档为简体中文 ([3272bca](https://github.com/xbeeant/downstash/commit/3272bca0c104218b8dcc152ee1b81c7277f23060))
+
+
+### Refactors
+
+* **routes/worker:** 优化请求体处理并添加调试日志 ([f958b6e](https://github.com/xbeeant/downstash/commit/f958b6eff7301590253865ea31b2e39b7a74143a))
+* 重构签名逻辑，支持密钥轮换功能 ([b8c510c](https://github.com/xbeeant/downstash/commit/b8c510cf1a4cf147747964d9d3561fb068d26e48))
+
 ## [0.1.2](https://github.com/xbeeant/downstash/compare/v0.1.1...v0.1.2) (2026-06-01)
 
 
