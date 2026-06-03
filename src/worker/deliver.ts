@@ -72,9 +72,10 @@ export async function deliverMessage(message: MessageRow, deps: DeliverDeps): Pr
     method: message.method,
     headers: Object.fromEntries(headers.entries()),
     bodyLength: message.body.length,
-    bodyPreview: message.body.length > 200 
-      ? new TextDecoder().decode(message.body.slice(0, 200)) + "..." 
-      : new TextDecoder().decode(message.body),
+    bodyPreview:
+      message.body.length > 200
+        ? new TextDecoder().decode(message.body.slice(0, 200)) + "..."
+        : new TextDecoder().decode(message.body),
     attempt: message.attempt,
     timeoutMs: message.timeoutMs,
   });

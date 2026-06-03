@@ -46,8 +46,15 @@ export function resolveConfig(
     },
     tickMs: overrides.tickMs ?? parseIntOr(env.DOWNSTASH_TICK_MS, 250),
     currentSigningKey:
-      overrides.currentSigningKey ?? env.DOWNSTASH_CURRENT_SIGNING_KEY ?? env.QSTASH_CURRENT_SIGNING_KEY ?? DEFAULT_CURRENT_KEY,
-    nextSigningKey: overrides.nextSigningKey ?? env.DOWNSTASH_NEXT_SIGNING_KEY ?? env.QSTASH_NEXT_SIGNING_KEY ?? DEFAULT_NEXT_KEY,
+      overrides.currentSigningKey ??
+      env.DOWNSTASH_CURRENT_SIGNING_KEY ??
+      env.QSTASH_CURRENT_SIGNING_KEY ??
+      DEFAULT_CURRENT_KEY,
+    nextSigningKey:
+      overrides.nextSigningKey ??
+      env.DOWNSTASH_NEXT_SIGNING_KEY ??
+      env.QSTASH_NEXT_SIGNING_KEY ??
+      DEFAULT_NEXT_KEY,
     logLevel: overrides.logLevel ?? (env.DOWNSTASH_LOG_LEVEL as LogLevel | undefined) ?? "info",
     redisToken: overrides.redisToken ?? env.DOWNSTASH_REDIS_TOKEN ?? "dev",
   };

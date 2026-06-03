@@ -47,18 +47,23 @@ export function createServer({ db, logger, redisStore, redisToken }: ServerDeps)
     return c.json({ error: "internal_error" }, 500);
   });
 
-  app.route("/", healthRoute());
-  app.route("/", publishRoute({ db, logger }));
-  app.route("/", messagesRoute({ db }));
-  app.route("/", schedulesRoute({ db, logger }));
-  app.route("/", queuesRoute({ db, logger }));
-  app.route("/", urlGroupsRoute({ db, logger }));
-  app.route("/", eventsRoute({ db }));
-  app.route("/", dlqRoute({ db }));
+  app.get("/health", (c) => c.json({ status: "ok" }));
+
+  const downstashApp = new Hono();
+  downstashApp.route("/", healthRoute());
+  downstashApp.route("/", publishRoute({ db, logger }));
+  downstashApp.route("/", messagesRoute({ db }));
+  downstashApp.route("/", schedulesRoute({ db, logger }));
+  downstashApp.route("/", queuesRoute({ db, logger }));
+  downstashApp.route("/", urlGroupsRoute({ db, logger }));
+  downstashApp.route("/", eventsRoute({ db }));
+  downstashApp.route("/", dlqRoute({ db }));
 
   if (redisStore) {
-    app.route("/", redisRoute({ store: redisStore, logger, redisToken: redisToken ?? "dev" }));
+    downstashApp.route("/", redisRoute({ store: redisStore, logger, redisToken: redisToken ?? "dev" }));
   }
+
+  app.route("/downstash", downstashApp);
 
   return app;
 }

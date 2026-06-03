@@ -133,7 +133,11 @@ export interface TokenStore {
   listTokens: () => Promise<Omit<TokenRow, "token">[]>;
   revokeToken: (token: string) => Promise<boolean>;
   updateLastUsed: (token: string) => Promise<void>;
-  updateSigningKeys: (tokenId: number, currentSigningKey: string, nextSigningKey: string) => Promise<void>;
+  updateSigningKeys: (
+    tokenId: number,
+    currentSigningKey: string,
+    nextSigningKey: string,
+  ) => Promise<void>;
 }
 
 export interface Db extends TokenStore {
@@ -737,10 +741,9 @@ export async function openDb(config: MySQLConfig): Promise<Db> {
   }
 
   async function verifyTokenByUserId(userId: number): Promise<TokenRow | null> {
-    const [rows] = await pool.execute<mysql.RowDataPacket[]>(
-      "SELECT * FROM tokens WHERE id = ?",
-      [userId],
-    );
+    const [rows] = await pool.execute<mysql.RowDataPacket[]>("SELECT * FROM tokens WHERE id = ?", [
+      userId,
+    ]);
     if (rows.length === 0) return null;
     return rowToToken(rows[0]!);
   }
